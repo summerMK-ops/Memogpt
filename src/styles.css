@@ -492,9 +492,21 @@ button:hover {
 }
 
 .editor-image img {
-  width: min(100%, 320px);
+  width: 100%;
   display: block;
   border-radius: 16px;
+}
+
+.editor-image.size-small img {
+  max-width: 160px;
+}
+
+.editor-image.size-medium img {
+  max-width: 320px;
+}
+
+.editor-image.size-large img {
+  max-width: min(100%, 520px);
 }
 
 .detail-bottom-bar {
@@ -539,6 +551,22 @@ button:hover {
   padding: 11px 12px;
   background: #f5f4f8;
   text-align: left;
+}
+
+.sheet-grid button.is-selected {
+  background: rgba(244, 164, 0, 0.16);
+  color: #8f5f00;
+  font-weight: 700;
+}
+
+.image-size-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.image-size-row button {
+  text-align: center;
 }
 
 .sheet-close-row {

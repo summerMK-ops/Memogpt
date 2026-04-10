@@ -399,6 +399,7 @@ export default function App() {
   const [listMenuOpen, setListMenuOpen] = useState(false);
   const [editorFocused, setEditorFocused] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const [imageInsertSize, setImageInsertSize] = useState("medium");
 
   useEffect(() => {
     fetch("/api/workspace")
@@ -592,9 +593,11 @@ export default function App() {
   }
 
   function closeSheet() {
-    editorRef.current?.focus();
-    restoreSelection();
     setSheet(null);
+    requestAnimationFrame(() => {
+      editorRef.current?.focus();
+      restoreSelection();
+    });
   }
 
   function handleEditorFocus() {
@@ -622,9 +625,14 @@ export default function App() {
   }
 
   function getCurrentBlock() {
-    restoreSelection();
     const selection = window.getSelection();
-    const node = selection?.anchorNode;
+    let range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    if ((!range || !editorRef.current?.contains(range.commonAncestorContainer)) && savedRangeRef.current) {
+      range = savedRangeRef.current;
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    const node = range?.startContainer;
     if (!node) {
       return null;
     }
@@ -651,6 +659,13 @@ export default function App() {
       replacement.dataset.toc = "true";
     }
     block.replaceWith(replacement);
+    const range = document.createRange();
+    range.selectNodeContents(replacement);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    saveSelection();
     setDraftHtml(editorRef.current.innerHTML);
     closeSheet();
   }
@@ -661,6 +676,7 @@ export default function App() {
       return;
     }
     block.dataset.toc = block.dataset.toc === "true" ? "false" : "true";
+    saveSelection();
     setDraftHtml(editorRef.current.innerHTML);
     closeSheet();
   }
@@ -676,6 +692,7 @@ export default function App() {
     } else {
       block.dataset[attribute] = value;
     }
+    saveSelection();
     setDraftHtml(editorRef.current.innerHTML);
     closeSheet();
   }
@@ -686,6 +703,7 @@ export default function App() {
       return;
     }
     block.dataset.weight = weight;
+    saveSelection();
     setDraftHtml(editorRef.current.innerHTML);
     closeSheet();
   }
@@ -717,22 +735,23 @@ export default function App() {
       return;
     }
 
-    const range = selection.getRangeAt(0);
-    const figure = document.createElement("figure");
-    figure.className = "editor-image";
-    figure.innerHTML = `<img src="${image.src}" alt="${escapeHtml(image.name)}">`;
-    range.deleteContents();
-    range.insertNode(figure);
+    const markerId = `marker-${createId()}`;
+    const imageClass = `editor-image size-${image.size || imageInsertSize}`;
+    const html = [
+      `<figure class="${imageClass}"><img src="${image.src}" alt="${escapeHtml(image.name)}"></figure>`,
+      `<p><span id="${markerId}"></span><br></p>`
+    ].join("");
+    document.execCommand("insertHTML", false, html);
 
-    const paragraph = document.createElement("p");
-    paragraph.innerHTML = "<br>";
-    figure.after(paragraph);
-
-    const nextRange = document.createRange();
-    nextRange.setStart(paragraph, 0);
-    nextRange.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(nextRange);
+    const marker = editorRef.current?.querySelector(`#${markerId}`);
+    if (marker) {
+      const nextRange = document.createRange();
+      nextRange.setStartAfter(marker);
+      nextRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+      marker.remove();
+    }
     saveSelection();
     syncDraftFromEditor();
     closeSheet();
@@ -763,7 +782,7 @@ export default function App() {
 
     const images = await Promise.all(files.map((file) => new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve({ src: reader.result, name: file.name });
+      reader.onload = () => resolve({ src: reader.result, name: file.name, size: imageInsertSize });
       reader.onerror = reject;
       reader.readAsDataURL(file);
     })));
@@ -1134,6 +1153,11 @@ export default function App() {
 
                     {sheet === "image" && (
                       <div className="sheet-grid">
+                        <div className="image-size-row">
+                          <button type="button" className={imageInsertSize === "small" ? "is-selected" : ""} onMouseDown={keepEditorSelection} onClick={() => setImageInsertSize("small")}>小</button>
+                          <button type="button" className={imageInsertSize === "medium" ? "is-selected" : ""} onMouseDown={keepEditorSelection} onClick={() => setImageInsertSize("medium")}>中</button>
+                          <button type="button" className={imageInsertSize === "large" ? "is-selected" : ""} onMouseDown={keepEditorSelection} onClick={() => setImageInsertSize("large")}>大</button>
+                        </div>
                         <button type="button" onMouseDown={keepEditorSelection} onClick={() => imageInputRef.current?.click()}>写真から選ぶ</button>
                         <button type="button" onMouseDown={keepEditorSelection} onClick={() => fileInputRef.current?.click()}>ファイルから選ぶ</button>
                         <button type="button" onMouseDown={keepEditorSelection} onClick={() => cameraInputRef.current?.click()}>カメラで撮る</button>
