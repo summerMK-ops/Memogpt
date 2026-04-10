@@ -1,11 +1,11 @@
 {
-  "name": "ChatGPT Memo",
-  "short_name": "GPT Memo",
-  "description": "ChatGPTの内容を題目ごとに整理するメモアプリ",
+  "name": "MemoGPT Workspace",
+  "short_name": "MemoGPT",
+  "description": "Apple Notes and Notion inspired memo workspace",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f7f3ea",
-  "theme_color": "#3f2f25",
+  "background_color": "#f3ede5",
+  "theme_color": "#e8ddd0",
   "lang": "ja",
   "icons": [
     {
