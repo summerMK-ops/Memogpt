@@ -499,17 +499,24 @@ button:hover {
   padding: 10px 0 18px;
   background: rgba(243, 242, 247, 0.96);
   border-top: 1px solid var(--line);
+  z-index: 28;
 }
 
 .bottom-icon {
   font-size: 1.25rem;
 }
 
+.bottom-icon.is-active {
+  color: #8f5f00;
+  font-weight: 700;
+}
+
 .editor-sheet {
   position: sticky;
   bottom: 64px;
-  padding-bottom: 10px;
-  background: linear-gradient(180deg, rgba(243, 242, 247, 0), rgba(243, 242, 247, 0.96) 34%);
+  z-index: 29;
+  padding: 10px 0 12px;
+  background: linear-gradient(180deg, rgba(243, 242, 247, 0), rgba(243, 242, 247, 0.96) 24%);
 }
 
 .sheet-grid {
@@ -631,5 +638,29 @@ button:hover {
 
   .apple-layout.is-detail-mode .floating-action-stack {
     display: none;
+  }
+
+  .detail-bottom-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+    background: rgba(243, 242, 247, 0.98);
+    backdrop-filter: blur(14px);
+  }
+
+  .editor-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(58px + env(safe-area-inset-bottom));
+    padding: 10px 16px 12px;
+    background: rgba(243, 242, 247, 0.98);
+    box-shadow: 0 -12px 26px rgba(31, 24, 14, 0.08);
+  }
+
+  .live-editor {
+    padding-bottom: 168px;
   }
 }

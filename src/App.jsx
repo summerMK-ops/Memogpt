@@ -366,6 +366,7 @@ function SwipeableNoteRow({
 export default function App() {
   const editorRef = useRef(null);
   const savedRangeRef = useRef(null);
+  const hydratedNoteIdRef = useRef(null);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -447,12 +448,13 @@ export default function App() {
       return;
     }
 
+    hydratedNoteIdRef.current = selectedNote.id;
     setDraftHtml(selectedNote.body);
-    if (editorRef.current) {
+    if (editorRef.current && editorRef.current.innerHTML !== selectedNote.body) {
       editorRef.current.innerHTML = selectedNote.body;
     }
     setSheet(null);
-  }, [selectedNoteId, selectedNote?.updatedAt]);
+  }, [selectedNote?.id]);
 
   useEffect(() => {
     if (!workspace || !selectedNote) {
@@ -539,6 +541,18 @@ export default function App() {
     selection.addRange(savedRangeRef.current);
   }
 
+  function keepEditorSelection(event) {
+    event.preventDefault();
+    editorRef.current?.focus();
+    restoreSelection();
+  }
+
+  function toggleSheet(nextSheet) {
+    editorRef.current?.focus();
+    restoreSelection();
+    setSheet((current) => (current === nextSheet ? null : nextSheet));
+  }
+
   function syncDraftFromEditor() {
     if (!editorRef.current) {
       return;
@@ -609,15 +623,23 @@ export default function App() {
   }
 
   function handleUndo() {
+    editorRef.current?.focus();
     restoreSelection();
     document.execCommand("undo");
-    syncDraftFromEditor();
+    requestAnimationFrame(() => {
+      syncDraftFromEditor();
+      saveSelection();
+    });
   }
 
   function handleRedo() {
+    editorRef.current?.focus();
     restoreSelection();
     document.execCommand("redo");
-    syncDraftFromEditor();
+    requestAnimationFrame(() => {
+      syncDraftFromEditor();
+      saveSelection();
+    });
   }
 
   function insertImageAtCursor(image) {
@@ -989,52 +1011,53 @@ export default function App() {
                   contentEditable
                   suppressContentEditableWarning
                   onInput={syncDraftFromEditor}
+                  onFocus={saveSelection}
                   onKeyUp={saveSelection}
                   onMouseUp={saveSelection}
                   onTouchEnd={saveSelection}
                 />
 
-                <div className="detail-bottom-bar">
-                  <button className="bottom-icon" type="button" onClick={handleReturnToList}>☰</button>
-                  <button className="bottom-icon" type="button" onClick={() => setSheet(sheet === "insert" ? null : "insert")}>＋</button>
-                  <button className="bottom-icon" type="button" onClick={() => setSheet(sheet === "format" ? null : "format")}>Aa</button>
-                  <button className="bottom-icon" type="button" onClick={() => setSheet(sheet === "image" ? null : "image")}>🖼</button>
-                  <button className="bottom-icon" type="button" onClick={handleUndo}>↶</button>
-                  <button className="bottom-icon" type="button" onClick={handleRedo}>↷</button>
-                  <button className="bottom-icon" type="button" onClick={handleCreateNote}>✎</button>
-                </div>
-
                 {sheet && (
                   <div className="editor-sheet">
                     {sheet === "insert" && (
                       <div className="sheet-grid">
-                        <button type="button" onClick={() => changeBlockTag("h1")}>見出し 1</button>
-                        <button type="button" onClick={() => changeBlockTag("h2")}>見出し 2</button>
-                        <button type="button" onClick={() => changeBlockTag("h3")}>見出し 3</button>
-                        <button type="button" onClick={toggleTocOnBlock}>見出しを目次に表示</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => changeBlockTag("h1")}>見出し 1</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => changeBlockTag("h2")}>見出し 2</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => changeBlockTag("h3")}>見出し 3</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={toggleTocOnBlock}>見出しを目次に表示</button>
                       </div>
                     )}
 
                     {sheet === "format" && (
                       <div className="sheet-grid">
-                        <button type="button" onClick={() => applyBlockStyle("size", "small")}>小さく</button>
-                        <button type="button" onClick={() => applyBlockStyle("size", "large")}>大きく</button>
-                        <button type="button" onClick={() => applyBlockStyle("font", "serif")}>明朝</button>
-                        <button type="button" onClick={() => applyBlockStyle("font", "mono")}>等幅</button>
-                        <button type="button" onClick={() => applyBold("medium")}>中太</button>
-                        <button type="button" onClick={() => applyBold("bold")}>太字</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => applyBlockStyle("size", "small")}>小さく</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => applyBlockStyle("size", "large")}>大きく</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => applyBlockStyle("font", "serif")}>明朝</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => applyBlockStyle("font", "mono")}>等幅</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => applyBold("medium")}>中太</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => applyBold("bold")}>太字</button>
                       </div>
                     )}
 
                     {sheet === "image" && (
                       <div className="sheet-grid">
-                        <button type="button" onClick={() => imageInputRef.current?.click()}>写真から選ぶ</button>
-                        <button type="button" onClick={() => fileInputRef.current?.click()}>ファイルから選ぶ</button>
-                        <button type="button" onClick={() => cameraInputRef.current?.click()}>カメラで撮る</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => imageInputRef.current?.click()}>写真から選ぶ</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => fileInputRef.current?.click()}>ファイルから選ぶ</button>
+                        <button type="button" onMouseDown={keepEditorSelection} onClick={() => cameraInputRef.current?.click()}>カメラで撮る</button>
                       </div>
                     )}
                   </div>
                 )}
+
+                <div className="detail-bottom-bar">
+                  <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleReturnToList}>☰</button>
+                  <button className={`bottom-icon ${sheet === "insert" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("insert")}>＋</button>
+                  <button className={`bottom-icon ${sheet === "format" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("format")}>Aa</button>
+                  <button className={`bottom-icon ${sheet === "image" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("image")}>🖼</button>
+                  <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleUndo}>↶</button>
+                  <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleRedo}>↷</button>
+                  <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleCreateNote}>✎</button>
+                </div>
 
                 <input ref={imageInputRef} className="hidden-input" type="file" accept="image/*" multiple onChange={handleImageFiles} />
                 <input ref={fileInputRef} className="hidden-input" type="file" accept="image/*" multiple onChange={handleImageFiles} />
