@@ -336,6 +336,67 @@ function fileToDataUrl(file) {
   });
 }
 
+function isToday(value) {
+  const today = new Date();
+  const date = new Date(value);
+  return today.toDateString() === date.toDateString();
+}
+
+function isWithinLastDays(value, days) {
+  const date = new Date(value);
+  const diff = Date.now() - date.getTime();
+  return diff <= days * 24 * 60 * 60 * 1000;
+}
+
+function noteSnippet(note) {
+  const text = note.body
+    .replace(/[#>\-\[\]\|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text || "メモ";
+}
+
+function AppleSection({ title, notes, workspace, selectedNote, onSelect }) {
+  if (!notes.length) {
+    return null;
+  }
+
+  return (
+    <section className="apple-section">
+      <div className="apple-section-head">
+        <h3>{title}</h3>
+        {title === "ピンで固定" && <span>›</span>}
+      </div>
+      <div className="apple-note-group">
+        {notes.map((note) => (
+          <button
+            key={note.id}
+            className={`apple-note-card ${selectedNote?.id === note.id ? "is-active" : ""}`}
+            type="button"
+            onClick={() => onSelect(note.id)}
+          >
+            <div className="apple-note-main">
+              <strong>{note.title}</strong>
+              <div className="apple-note-meta">
+                <span>{formatWhen(note.updatedAt)}</span>
+                <span>{noteSnippet(note)}</span>
+              </div>
+              <div className="apple-note-folder">
+                <span>🗂</span>
+                <span>{workspace.folders.find((folder) => folder.id === note.folderId)?.name || "メモ"}</span>
+              </div>
+            </div>
+            {note.images[0] && (
+              <img className="apple-note-thumb" src={note.images[0].src} alt={note.images[0].name} />
+            )}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function draftMatchesNote(draft, note) {
   if (!draft || !note) {
     return false;
@@ -362,6 +423,7 @@ export default function App() {
   const [templateId, setTemplateId] = useState("blank");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [mobileMode, setMobileMode] = useState("list");
   const saveTimerRef = useRef(null);
 
   const notesByTitle = useMemo(() => {
@@ -398,6 +460,11 @@ export default function App() {
     || workspace?.notes[0]
     || null;
 
+  const pinnedNotes = filteredNotes.filter((note) => note.pinned);
+  const todayNotes = filteredNotes.filter((note) => isToday(note.updatedAt) && !note.pinned);
+  const weekNotes = filteredNotes.filter((note) => isWithinLastDays(note.updatedAt, 7) && !isToday(note.updatedAt) && !note.pinned);
+  const olderNotes = filteredNotes.filter((note) => !isWithinLastDays(note.updatedAt, 7) && !note.pinned);
+
   const slashState = draft ? getActiveSlashState(draft.body, draft.selectionStart ?? draft.body.length) : null;
   const visibleCommands = slashState
     ? slashCommands.filter((command) => command.label.toLowerCase().includes(slashState.query))
@@ -415,12 +482,14 @@ export default function App() {
         const normalized = normalizeWorkspace(payload);
         setWorkspace(normalized);
         setSelectedNoteId(normalized.notes[0]?.id || null);
+        setMobileMode("list");
         setSaveState("Saved");
       })
       .catch(() => {
         const fallback = createFallbackWorkspace();
         setWorkspace(fallback);
         setSelectedNoteId(fallback.notes[0]?.id || null);
+        setMobileMode("list");
         setSaveState("Offline draft");
         setError("API load failed. Showing fallback data.");
       })
@@ -563,6 +632,7 @@ export default function App() {
     setDraft(buildDraftFromNote(note));
     setSearch("");
     setMobileSidebarOpen(false);
+    setMobileMode("detail");
     setWorkspaceAndPersist(nextWorkspace, note.id);
   }
 
@@ -582,6 +652,7 @@ export default function App() {
     };
 
     setDraft(buildDraftFromNote(duplicate));
+    setMobileMode("detail");
     setWorkspaceAndPersist({ ...workspace, notes: [duplicate, ...workspace.notes] }, duplicate.id);
   }
 
@@ -640,6 +711,7 @@ export default function App() {
 
   function jumpToNote(noteId) {
     setSelectedNoteId(noteId);
+    setMobileMode("detail");
   }
 
   function handleExport() {
@@ -685,7 +757,7 @@ export default function App() {
   }, {});
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell apple-layout ${mobileMode === "detail" ? "is-detail-mode" : "is-list-mode"}`}>
       <aside className={`sidebar ${mobileSidebarOpen ? "is-open" : ""}`}>
         <div className="brand-card">
           <p className="brand-kicker">Memo workspace</p>
@@ -728,49 +800,30 @@ export default function App() {
       </aside>
 
       <main className="workspace">
-        <header className="topbar">
-          <div className="topbar-title">
-            <button className="menu-button" type="button" onClick={() => setMobileSidebarOpen((current) => !current)}>
-              <span />
-              <span />
-              <span />
-            </button>
-            <div>
-              <p className="eyebrow">Apple Notes x Notion</p>
-              <h2>Fast notes, clean structure</h2>
-            </div>
-          </div>
-
-          <div className="topbar-actions">
-            <label className="search-box">
-              <input
-                type="search"
-                placeholder="Search notes, tags, and text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </label>
-            <label className="import-button">
-              <span>Import</span>
-              <input type="file" accept="application/json" onChange={handleImport} />
-            </label>
-            <button className="secondary-button" type="button" onClick={handleExport}>Export</button>
-          </div>
-        </header>
-
-        {error && <div className="error-banner">{error}</div>}
-
-        <section className="workspace-grid">
-          <div className="panel note-panel">
-            <div className="panel-head">
-              <div>
-                <p className="eyebrow">Notes</p>
-                <h3>{filteredNotes.length} notes</h3>
+        <section className="workspace-grid apple-grid">
+          <div className="panel note-panel apple-list-panel">
+            <header className="notes-header">
+              <div className="notes-header-row">
+                <button className="back-link" type="button" onClick={() => setMobileSidebarOpen((current) => !current)}>
+                  ‹ フォルダ
+                </button>
+                <button className="circle-action" type="button" onClick={handleExport}>⋯</button>
               </div>
-              <button className="primary-button" type="button" onClick={handleCreateNote}>New note</button>
-            </div>
+              <h2 className="notes-title">すべての iCloud</h2>
+              <div className="apple-search">
+                <span className="apple-search-icon">⌕</span>
+                <input
+                  type="search"
+                  placeholder="検索"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
+            </header>
 
-            <div className="template-row">
+            {error && <div className="error-banner">{error}</div>}
+
+            <div className="template-row apple-template-row">
               <select value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
                 {noteTemplates.map((template) => (
                   <option key={template.id} value={template.id}>{template.label}</option>
@@ -778,53 +831,80 @@ export default function App() {
               </select>
             </div>
 
-            <div className="note-list">
-              {filteredNotes.map((note) => (
-                <button
-                  key={note.id}
-                  className={`note-card ${selectedNote?.id === note.id ? "is-active" : ""}`}
-                  type="button"
-                  onClick={() => {
-                    setSelectedNoteId(note.id);
+            <div className="notes-sections">
+              {pinnedNotes.length > 0 && (
+                <AppleSection
+                  title="ピンで固定"
+                  notes={pinnedNotes}
+                  workspace={workspace}
+                  selectedNote={selectedNote}
+                  onSelect={(noteId) => {
+                    setSelectedNoteId(noteId);
+                    setMobileMode("detail");
                     setMobileSidebarOpen(false);
                   }}
-                >
-                  <div className="note-card-top">
-                    <h4>{note.title}</h4>
-                    {note.pinned && <span className="pill">Pinned</span>}
-                  </div>
-                  <p>{note.body.slice(0, 120) || "No content yet"}</p>
-                  <div className="note-card-meta">
-                    <span>{workspace.folders.find((folder) => folder.id === note.folderId)?.name}</span>
-                    <span>{formatWhen(note.updatedAt)}</span>
-                  </div>
-                  <div className="tag-row">
-                    {note.tags.map((tag) => <span key={tag} className="tag-chip">#{tag}</span>)}
-                    {note.images.length > 0 && <span className="tag-chip">{note.images.length} images</span>}
-                  </div>
-                </button>
-              ))}
+                />
+              )}
+              <AppleSection
+                title="今日"
+                notes={todayNotes}
+                workspace={workspace}
+                selectedNote={selectedNote}
+                onSelect={(noteId) => {
+                  setSelectedNoteId(noteId);
+                  setMobileMode("detail");
+                  setMobileSidebarOpen(false);
+                }}
+              />
+              <AppleSection
+                title="過去7日間"
+                notes={weekNotes}
+                workspace={workspace}
+                selectedNote={selectedNote}
+                onSelect={(noteId) => {
+                  setSelectedNoteId(noteId);
+                  setMobileMode("detail");
+                  setMobileSidebarOpen(false);
+                }}
+              />
+              {olderNotes.length > 0 && (
+                <AppleSection
+                  title="それ以前"
+                  notes={olderNotes}
+                  workspace={workspace}
+                  selectedNote={selectedNote}
+                  onSelect={(noteId) => {
+                    setSelectedNoteId(noteId);
+                    setMobileMode("detail");
+                    setMobileSidebarOpen(false);
+                  }}
+                />
+              )}
             </div>
+
+            <footer className="notes-footer">
+              <span>{workspace.notes.length}件のメモ</span>
+              <button className="compose-button" type="button" onClick={handleCreateNote}>✎</button>
+            </footer>
           </div>
 
-          <div className="panel editor-panel">
+          <div className="panel editor-panel apple-editor-panel">
             {draft ? (
               <>
-                <div className="panel-head">
-                  <div>
-                    <p className="eyebrow">Editor</p>
-                    <h3>{draft.title || "Untitled"}</h3>
+                <header className="detail-topbar">
+                  <button className="back-link" type="button" onClick={() => setMobileMode("list")}>
+                    ‹ すべての iCloud
+                  </button>
+                  <div className="detail-actions">
+                    <button className="icon-action" type="button" onClick={handleExport}>⤴</button>
+                    <button className="icon-action" type="button" onClick={handleDuplicateNote}>⋯</button>
                   </div>
-                  <div className="action-row">
-                    <button className="secondary-button" type="button" onClick={handleDuplicateNote}>Duplicate</button>
-                    <button className="danger-button" type="button" onClick={handleDeleteNote}>Delete</button>
-                  </div>
-                </div>
+                </header>
 
-                <div className="editor-form">
-                  <input className="title-input" value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} placeholder="Untitled" />
+                <div className="editor-form apple-editor-form">
+                  <input className="title-input apple-title-input" value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} placeholder="タイトル" />
 
-                  <div className="editor-meta-grid">
+                  <div className="editor-meta-grid apple-meta-grid">
                     <label>
                       <span>Folder</span>
                       <select value={draft.folderId} onChange={(event) => updateDraft("folderId", event.target.value)}>
@@ -850,11 +930,11 @@ export default function App() {
                     </label>
                   </div>
 
-                  <div className="helper-copy">Type <code>/</code> for blocks, <code>#tag</code> and <code>[[Note Title]]</code> for links.</div>
+                  <div className="helper-copy apple-helper-copy">/ でブロック追加、#tag と [[ノート名]] で整理</div>
 
                   <div className="editor-area-wrap">
                     <textarea
-                      className="editor-area"
+                      className="editor-area apple-editor-area"
                       value={draft.body}
                       onChange={(event) => updateDraft("body", event.target.value)}
                       onClick={(event) => updateDraft("selectionStart", event.target.selectionStart)}
@@ -888,7 +968,17 @@ export default function App() {
 
                   <div className="save-line">
                     <span>{saveState}</span>
+                    <span>{draft.images.length} 枚の画像</span>
                     <span>Updated {formatWhen(selectedNote?.updatedAt || new Date().toISOString())}</span>
+                  </div>
+
+                  <div className="detail-bottom-bar">
+                    <button className="bottom-icon" type="button" onClick={() => setMobileMode("list")}>☰</button>
+                    <label className="bottom-icon image-upload">
+                      <span>📎</span>
+                      <input type="file" accept="image/*" multiple onChange={handleImageChange} />
+                    </label>
+                    <button className="bottom-icon" type="button" onClick={handleCreateNote}>✎</button>
                   </div>
                 </div>
               </>
@@ -897,7 +987,7 @@ export default function App() {
             )}
           </div>
 
-          <div className="panel preview-panel">
+          <div className="panel preview-panel apple-preview-panel">
             <div className="panel-head">
               <div>
                 <p className="eyebrow">Preview</p>

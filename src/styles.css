@@ -1,13 +1,13 @@
 :root {
-  --bg: #f5efe7;
-  --panel: rgba(255, 252, 248, 0.9);
-  --line: rgba(109, 86, 64, 0.16);
-  --line-strong: rgba(109, 86, 64, 0.28);
-  --text: #211812;
-  --muted: #756454;
-  --accent: #ca7546;
-  --accent-soft: rgba(202, 117, 70, 0.12);
-  --shadow: 0 24px 60px rgba(65, 42, 22, 0.1);
+  --bg: #f3f2f7;
+  --panel: rgba(255, 255, 255, 0.92);
+  --line: rgba(60, 60, 67, 0.12);
+  --line-strong: rgba(60, 60, 67, 0.24);
+  --text: #171717;
+  --muted: #7a7a81;
+  --accent: #f0a500;
+  --accent-soft: rgba(240, 165, 0, 0.14);
+  --shadow: 0 18px 40px rgba(24, 24, 28, 0.08);
   --radius-xl: 28px;
   --radius-lg: 20px;
   --radius-md: 14px;
@@ -26,10 +26,8 @@ body,
 body {
   margin: 0;
   color: var(--text);
-  font-family: "Segoe UI", "Hiragino Sans", sans-serif;
-  background:
-    radial-gradient(circle at top left, rgba(229, 191, 154, 0.35), transparent 28%),
-    linear-gradient(135deg, #fcf8f3, #f1e7dc 58%, #eadbcf);
+  font-family: "SF Pro Display", "Helvetica Neue", "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f7f6fb, #f1f0f6);
 }
 
 button,
@@ -215,7 +213,7 @@ textarea {
 }
 
 .workspace {
-  padding: 22px;
+  padding: 16px;
 }
 
 .topbar {
@@ -267,8 +265,8 @@ textarea {
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: 18px;
+  grid-template-columns: 360px minmax(0, 1fr) 360px;
+  gap: 16px;
   align-items: start;
 }
 
@@ -278,6 +276,12 @@ textarea {
   background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(16px);
+}
+
+.apple-list-panel,
+.apple-editor-panel,
+.apple-preview-panel {
+  min-height: calc(100vh - 32px);
 }
 
 .panel-head {
@@ -309,6 +313,213 @@ textarea {
 .note-card.is-active {
   border-color: rgba(202, 117, 70, 0.32);
   background: rgba(255, 249, 243, 1);
+}
+
+.notes-header {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.notes-header-row,
+.detail-topbar,
+.detail-actions,
+.notes-footer,
+.apple-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.back-link,
+.circle-action,
+.icon-action,
+.compose-button,
+.bottom-icon {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.back-link {
+  padding: 0;
+  font-size: 1rem;
+}
+
+.circle-action,
+.icon-action {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(240, 165, 0, 0.1);
+}
+
+.notes-title {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.apple-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #e9e8ee;
+  color: var(--muted);
+}
+
+.apple-search input {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.apple-search-icon {
+  font-size: 0.95rem;
+}
+
+.apple-template-row {
+  margin-bottom: 18px;
+}
+
+.apple-template-row select {
+  background: #ffffff;
+}
+
+.notes-sections {
+  display: grid;
+  gap: 20px;
+}
+
+.apple-section {
+  display: grid;
+  gap: 10px;
+}
+
+.apple-section h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.apple-section-head span {
+  color: var(--accent);
+  font-size: 1.2rem;
+}
+
+.apple-note-group {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #e4e2ea;
+}
+
+.apple-note-card {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: stretch;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 0;
+  text-align: left;
+}
+
+.apple-note-card.is-active {
+  background: #fff8eb;
+}
+
+.apple-note-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.apple-note-main strong {
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.apple-note-meta,
+.apple-note-folder {
+  display: flex;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  min-width: 0;
+}
+
+.apple-note-meta span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apple-note-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.notes-footer {
+  margin-top: 20px;
+  color: var(--muted);
+  justify-content: center;
+  position: relative;
+}
+
+.compose-button {
+  position: absolute;
+  right: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(240, 165, 0, 0.12);
+  font-size: 1.2rem;
+}
+
+.detail-topbar {
+  margin-bottom: 12px;
+}
+
+.apple-editor-form {
+  gap: 16px;
+}
+
+.apple-title-input {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.apple-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #f5f4f8;
+}
+
+.apple-helper-copy {
+  font-size: 0.9rem;
+}
+
+.apple-editor-area {
+  min-height: 52vh;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+.detail-bottom-bar {
+  display: none;
 }
 
 .note-card-top,
@@ -473,6 +684,10 @@ textarea {
   margin-bottom: 16px;
 }
 
+.apple-preview-panel .preview-header h2 {
+  font-size: 1.35rem;
+}
+
 .preview-body {
   display: grid;
   gap: 10px;
@@ -610,24 +825,49 @@ textarea {
   }
 
   .workspace {
-    padding: 16px;
+    padding: 0;
   }
 
   .workspace-grid {
     grid-template-columns: 1fr;
+    gap: 0;
   }
 
-  .note-list {
-    max-height: none;
+  .apple-list-panel,
+  .apple-editor-panel,
+  .apple-preview-panel {
+    min-height: 100vh;
+    border-radius: 0;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .apple-layout.is-detail-mode .apple-list-panel,
+  .apple-layout.is-detail-mode .apple-preview-panel {
+    display: none;
+  }
+
+  .apple-layout.is-list-mode .apple-editor-panel,
+  .apple-layout.is-list-mode .apple-preview-panel {
+    display: none;
+  }
+
+  .detail-bottom-bar {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    position: sticky;
+    bottom: 0;
+    padding: 12px 0 20px;
+    background: rgba(243, 242, 247, 0.96);
+  }
+
+  .bottom-icon {
+    font-size: 1.2rem;
   }
 }
 
 @media (max-width: 640px) {
-  .topbar,
-  .topbar-actions,
-  .panel-head,
-  .note-card-top,
-  .note-card-meta,
   .toolbar-row,
   .action-row,
   .save-line {
@@ -635,11 +875,16 @@ textarea {
     align-items: stretch;
   }
 
-  .search-box {
-    min-width: 100%;
-  }
-
   .editor-meta-grid {
     grid-template-columns: 1fr;
+  }
+
+  .notes-title,
+  .apple-title-input {
+    font-size: 1.35rem;
+  }
+
+  .apple-note-card {
+    padding: 12px 14px;
   }
 }
