@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#3f2f25">
+  <meta name="description" content="ChatGPTの内容を題目ごとに整理できるメモアプリ">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <title>ChatGPT Memo</title>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar is-hidden" id="sidebar">
+      <div class="sidebar-header">
+        <h1>目次</h1>
+      </div>
+      <nav id="tocList" class="toc-list" aria-label="題目一覧"></nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="menuToggle" class="icon-button" type="button" aria-label="目次を開閉">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+          <div>
+            <p class="eyebrow">ChatGPTメモ</p>
+            <h2>題目ごとに整理するノート</h2>
+          </div>
+        </div>
+        <label class="search-box">
+          <input id="searchInput" type="search" placeholder="メモ内を検索">
+        </label>
+      </header>
+
+      <section class="editor-panel">
+        <div class="panel-card">
+          <div class="card-header">
+            <h3 id="formHeading">新しいメモを追加</h3>
+            <button id="cancelEditButton" class="secondary-button hidden" type="button">編集をやめる</button>
+          </div>
+          <form id="noteForm" class="note-form">
+            <input id="titleInput" type="text" placeholder="題目を入力" required>
+            <textarea id="bodyInput" rows="6" placeholder="ChatGPTの内容をここにメモ"></textarea>
+            <label class="upload-box">
+              <span>画像を追加</span>
+              <input id="imageInput" type="file" accept="image/*" multiple>
+            </label>
+            <div id="editingImages" class="editing-images hidden"></div>
+            <div class="form-actions">
+              <button id="submitButton" class="primary-button" type="submit">メモを保存</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel-card">
+          <div class="card-header card-header-stack">
+            <div>
+              <h3>メモ一覧</h3>
+              <p id="searchStatus">すべて表示中</p>
+            </div>
+            <div class="toolbar">
+              <button id="exportButton" class="secondary-button" type="button">ファイル保存</button>
+              <label class="secondary-button file-button">
+                <span>ファイル読込</span>
+                <input id="importInput" type="file" accept="application/json">
+              </label>
+            </div>
+          </div>
+          <div id="notesContainer" class="notes-container"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <template id="noteTemplate">
+    <article class="note-card">
+      <div class="note-heading">
+        <h3 class="note-title"></h3>
+        <div class="note-actions">
+          <button class="secondary-button note-edit-button" type="button">編集</button>
+          <button class="danger-button note-delete-button" type="button">削除</button>
+        </div>
+      </div>
+      <p class="note-body"></p>
+      <div class="note-images"></div>
+    </article>
+  </template>
+
+  <template id="editingImageTemplate">
+    <div class="editing-image-card">
+      <img class="editing-image-preview" alt="編集中の画像">
+      <button class="danger-button remove-image-button" type="button">画像を外す</button>
+    </div>
+  </template>
+
+  <div id="imageMenu" class="image-menu hidden" role="menu" aria-label="画像サイズメニュー">
+    <button type="button" data-size="small">小</button>
+    <button type="button" data-size="medium">中</button>
+    <button type="button" data-size="large">大</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
