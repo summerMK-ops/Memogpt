@@ -386,6 +386,7 @@ export default function App() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedNoteIds, setSelectedNoteIds] = useState([]);
   const [listMenuOpen, setListMenuOpen] = useState(false);
+  const [editorFocused, setEditorFocused] = useState(false);
 
   useEffect(() => {
     fetch("/api/workspace")
@@ -550,7 +551,23 @@ export default function App() {
   function toggleSheet(nextSheet) {
     editorRef.current?.focus();
     restoreSelection();
+    setEditorFocused(true);
     setSheet((current) => (current === nextSheet ? null : nextSheet));
+  }
+
+  function handleEditorFocus() {
+    setEditorFocused(true);
+    saveSelection();
+  }
+
+  function handleEditorBlur() {
+    window.setTimeout(() => {
+      if (document.activeElement === editorRef.current) {
+        return;
+      }
+      setEditorFocused(false);
+      setSheet(null);
+    }, 0);
   }
 
   function syncDraftFromEditor() {
@@ -756,6 +773,8 @@ export default function App() {
 
   function handleReturnToList() {
     flushCurrentNoteBeforeLeaving();
+    setEditorFocused(false);
+    setSheet(null);
     setMobileMode("list");
   }
 
@@ -868,6 +887,8 @@ export default function App() {
   if (loading || !workspace) {
     return <div className="loading-screen">Loading MemoGPT...</div>;
   }
+
+  const shouldShowKeyboardTools = editorFocused;
 
   return (
     <div className={`app-shell apple-layout ${mobileMode === "detail" ? "is-detail-mode" : "is-list-mode"}`}>
@@ -1007,17 +1028,18 @@ export default function App() {
 
                 <div
                   ref={editorRef}
-                  className="live-editor"
+                  className={`live-editor ${shouldShowKeyboardTools ? "has-keyboard-tools" : ""}`}
                   contentEditable
                   suppressContentEditableWarning
                   onInput={syncDraftFromEditor}
-                  onFocus={saveSelection}
+                  onFocus={handleEditorFocus}
+                  onBlur={handleEditorBlur}
                   onKeyUp={saveSelection}
                   onMouseUp={saveSelection}
                   onTouchEnd={saveSelection}
                 />
 
-                {sheet && (
+                {shouldShowKeyboardTools && sheet && (
                   <div className="editor-sheet">
                     {sheet === "insert" && (
                       <div className="sheet-grid">
@@ -1049,15 +1071,17 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="detail-bottom-bar">
-                  <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleReturnToList}>☰</button>
-                  <button className={`bottom-icon ${sheet === "insert" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("insert")}>＋</button>
-                  <button className={`bottom-icon ${sheet === "format" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("format")}>Aa</button>
-                  <button className={`bottom-icon ${sheet === "image" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("image")}>🖼</button>
-                  <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleUndo}>↶</button>
-                  <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleRedo}>↷</button>
-                  <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleCreateNote}>✎</button>
-                </div>
+                {shouldShowKeyboardTools && (
+                  <div className="detail-bottom-bar">
+                    <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleReturnToList}>☰</button>
+                    <button className={`bottom-icon ${sheet === "insert" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("insert")}>＋</button>
+                    <button className={`bottom-icon ${sheet === "format" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("format")}>Aa</button>
+                    <button className={`bottom-icon ${sheet === "image" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("image")}>🖼</button>
+                    <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleUndo}>↶</button>
+                    <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleRedo}>↷</button>
+                    <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleCreateNote}>✎</button>
+                  </div>
+                )}
 
                 <input ref={imageInputRef} className="hidden-input" type="file" accept="image/*" multiple onChange={handleImageFiles} />
                 <input ref={fileInputRef} className="hidden-input" type="file" accept="image/*" multiple onChange={handleImageFiles} />

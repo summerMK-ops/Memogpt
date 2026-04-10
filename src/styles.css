@@ -424,6 +424,10 @@ button:hover {
   -webkit-user-modify: read-write-plaintext-only;
 }
 
+.live-editor.has-keyboard-tools {
+  padding-bottom: 168px;
+}
+
 .live-editor h1,
 .live-editor h2,
 .live-editor h3,
@@ -660,7 +664,4 @@ button:hover {
     box-shadow: 0 -12px 26px rgba(31, 24, 14, 0.08);
   }
 
-  .live-editor {
-    padding-bottom: 168px;
-  }
 }
