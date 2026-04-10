@@ -441,15 +441,23 @@ function SwipeableNoteRow({
   onDelete
 }) {
   const touchStartXRef = useRef(0);
+  const touchStartYRef = useRef(0);
   const touchDeltaRef = useRef(0);
+  const touchMovedRef = useRef(false);
 
   function handleTouchStart(event) {
     touchStartXRef.current = event.touches[0].clientX;
+    touchStartYRef.current = event.touches[0].clientY;
     touchDeltaRef.current = 0;
+    touchMovedRef.current = false;
   }
 
   function handleTouchMove(event) {
     touchDeltaRef.current = event.touches[0].clientX - touchStartXRef.current;
+    const deltaY = event.touches[0].clientY - touchStartYRef.current;
+    if (Math.abs(deltaY) > 10 || Math.abs(touchDeltaRef.current) > 10) {
+      touchMovedRef.current = true;
+    }
   }
 
   function handleTouchEnd() {
@@ -463,7 +471,7 @@ function SwipeableNoteRow({
       return;
     }
 
-    if (!isOpen) {
+    if (!touchMovedRef.current && !isOpen) {
       onSelect();
     }
   }
@@ -482,6 +490,10 @@ function SwipeableNoteRow({
         className={`apple-note-card ${isActive ? "is-active" : ""}`}
         type="button"
         onClick={() => {
+          if (touchMovedRef.current) {
+            touchMovedRef.current = false;
+            return;
+          }
           if (isOpen) {
             onClose();
             return;
@@ -541,6 +553,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [mobileMode, setMobileMode] = useState("list");
   const [swipedNoteId, setSwipedNoteId] = useState(null);
+  const [insertMenuOpen, setInsertMenuOpen] = useState(false);
   const saveTimerRef = useRef(null);
 
   const notesByTitle = useMemo(() => {
@@ -844,6 +857,21 @@ export default function App() {
     });
   }
 
+  function insertAtCursor(snippet) {
+    if (!draft) {
+      return;
+    }
+
+    const start = draft.selectionStart ?? draft.editorText.length;
+    const nextText = `${draft.editorText.slice(0, start)}${snippet}${draft.editorText.slice(start)}`;
+    setDraft({
+      ...draft,
+      editorText: nextText,
+      selectionStart: start + snippet.length
+    });
+    setInsertMenuOpen(false);
+  }
+
   async function handleImageChange(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length || !draft) {
@@ -1072,8 +1100,6 @@ export default function App() {
                 </header>
 
                   <div className="editor-form apple-editor-form">
-                  <div className="helper-copy apple-helper-copy">/ でブロック追加、#tag と [[ノート名]] で整理</div>
-
                   <div className="editor-area-wrap">
                     <textarea
                       className="editor-area apple-editor-area"
@@ -1103,8 +1129,26 @@ export default function App() {
                     <span>Updated {formatWhen(selectedNote?.updatedAt || new Date().toISOString())}</span>
                   </div>
 
+                  <div className="mobile-inline-preview">
+                    {buildPreview({
+                      ...draft,
+                      title: splitEditorText(draft.editorText).title,
+                      body: splitEditorText(draft.editorText).body,
+                      tags: parseTags(draft.tagInput)
+                    }, notesByTitle, jumpToNote)}
+                  </div>
+
                   <div className="detail-bottom-bar">
                     <button className="bottom-icon" type="button" onClick={() => setMobileMode("list")}>☰</button>
+                    <div className="insert-button-wrap">
+                      <button className="bottom-icon" type="button" onClick={() => setInsertMenuOpen((current) => !current)}>≡</button>
+                      {insertMenuOpen && (
+                        <div className="insert-popover">
+                          <button type="button" onClick={() => insertAtCursor("\n## 目次\n")}>目次追加</button>
+                          <button type="button" onClick={() => insertAtCursor("\n---\n")}>区切り線</button>
+                        </div>
+                      )}
+                    </div>
                     <label className="bottom-icon image-upload bottom-upload">
                       <span>📎</span>
                       <input type="file" accept="image/*" multiple onChange={handleImageChange} />

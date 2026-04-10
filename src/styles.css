@@ -552,6 +552,34 @@ textarea {
   display: none;
 }
 
+.insert-button-wrap {
+  position: relative;
+}
+
+.insert-popover {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+  min-width: 132px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  z-index: 50;
+}
+
+.insert-popover button {
+  border: 0;
+  background: #f5f4f8;
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
 .note-card-top,
 .note-card-meta,
 .toolbar-row,
@@ -741,6 +769,10 @@ textarea {
   aspect-ratio: auto;
 }
 
+.mobile-inline-preview {
+  display: none;
+}
+
 .preview-body h2,
 .preview-body h3,
 .preview-body h4,
@@ -914,6 +946,11 @@ textarea {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .mobile-inline-preview {
+    display: block;
+    padding-top: 10px;
   }
 
   .floating-compose-button {
