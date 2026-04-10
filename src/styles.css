@@ -648,17 +648,18 @@ button:hover {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: var(--keyboard-inset, 0px);
     padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
     background: rgba(243, 242, 247, 0.98);
     backdrop-filter: blur(14px);
+    box-shadow: 0 -10px 24px rgba(31, 24, 14, 0.08);
   }
 
   .editor-sheet {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: calc(58px + env(safe-area-inset-bottom));
+    bottom: calc(var(--keyboard-sheet-offset, 58px) + env(safe-area-inset-bottom));
     padding: 10px 16px 12px;
     background: rgba(243, 242, 247, 0.98);
     box-shadow: 0 -12px 26px rgba(31, 24, 14, 0.08);

@@ -387,6 +387,7 @@ export default function App() {
   const [selectedNoteIds, setSelectedNoteIds] = useState([]);
   const [listMenuOpen, setListMenuOpen] = useState(false);
   const [editorFocused, setEditorFocused] = useState(false);
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   useEffect(() => {
     fetch("/api/workspace")
@@ -411,6 +412,30 @@ export default function App() {
         setLoading(false);
         setSaveState("Saved");
       });
+  }, []);
+
+  useEffect(() => {
+    function updateKeyboardInset() {
+      const viewport = window.visualViewport;
+      if (!viewport) {
+        setKeyboardInset(0);
+        return;
+      }
+
+      const inset = Math.max(0, window.innerHeight - (viewport.height + viewport.offsetTop));
+      setKeyboardInset(inset);
+    }
+
+    updateKeyboardInset();
+    window.visualViewport?.addEventListener("resize", updateKeyboardInset);
+    window.visualViewport?.addEventListener("scroll", updateKeyboardInset);
+    window.addEventListener("resize", updateKeyboardInset);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateKeyboardInset);
+      window.visualViewport?.removeEventListener("scroll", updateKeyboardInset);
+      window.removeEventListener("resize", updateKeyboardInset);
+    };
   }, []);
 
   const filteredNotes = useMemo(() => {
@@ -557,6 +582,7 @@ export default function App() {
 
   function handleEditorFocus() {
     setEditorFocused(true);
+    setKeyboardInset((current) => current);
     saveSelection();
   }
 
@@ -889,6 +915,8 @@ export default function App() {
   }
 
   const shouldShowKeyboardTools = editorFocused;
+  const keyboardBarStyle = shouldShowKeyboardTools ? { "--keyboard-inset": `${keyboardInset}px` } : undefined;
+  const keyboardSheetStyle = shouldShowKeyboardTools ? { "--keyboard-sheet-offset": `${keyboardInset + 58}px` } : undefined;
 
   return (
     <div className={`app-shell apple-layout ${mobileMode === "detail" ? "is-detail-mode" : "is-list-mode"}`}>
@@ -1040,7 +1068,7 @@ export default function App() {
                 />
 
                 {shouldShowKeyboardTools && sheet && (
-                  <div className="editor-sheet">
+                  <div className="editor-sheet" style={keyboardSheetStyle}>
                     {sheet === "insert" && (
                       <div className="sheet-grid">
                         <button type="button" onMouseDown={keepEditorSelection} onClick={() => changeBlockTag("h1")}>見出し 1</button>
@@ -1072,7 +1100,7 @@ export default function App() {
                 )}
 
                 {shouldShowKeyboardTools && (
-                  <div className="detail-bottom-bar">
+                  <div className="detail-bottom-bar" style={keyboardBarStyle}>
                     <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleReturnToList}>☰</button>
                     <button className={`bottom-icon ${sheet === "insert" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("insert")}>＋</button>
                     <button className={`bottom-icon ${sheet === "format" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("format")}>Aa</button>
