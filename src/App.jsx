@@ -90,6 +90,14 @@ function createNote(folderId, templateBody = "") {
   };
 }
 
+function buildDraftFromNote(note) {
+  return {
+    ...note,
+    tagInput: note.tags.join(", "),
+    selectionStart: note.body.length
+  };
+}
+
 function normalizeWorkspace(candidate) {
   const fallback = createFallbackWorkspace();
   if (!candidate || typeof candidate !== "object") {
@@ -419,15 +427,15 @@ export default function App() {
       return;
     }
 
-    setDraft({
-      ...selectedNote,
-      tagInput: selectedNote.tags.join(", "),
-      selectionStart: selectedNote.body.length
-    });
+    setDraft(buildDraftFromNote(selectedNote));
   }, [selectedNoteId, selectedNote?.updatedAt]);
 
   useEffect(() => {
     if (!workspace || !draft || !selectedNote) {
+      return undefined;
+    }
+
+    if (draft.id !== selectedNote.id) {
       return undefined;
     }
 
@@ -544,6 +552,8 @@ export default function App() {
       ...workspace,
       notes: [note, ...workspace.notes]
     };
+    setDraft(buildDraftFromNote(note));
+    setSearch("");
     setMobileSidebarOpen(false);
     setWorkspaceAndPersist(nextWorkspace, note.id);
   }
@@ -563,6 +573,7 @@ export default function App() {
       updatedAt: now
     };
 
+    setDraft(buildDraftFromNote(duplicate));
     setWorkspaceAndPersist({ ...workspace, notes: [duplicate, ...workspace.notes] }, duplicate.id);
   }
 
