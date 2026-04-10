@@ -1,44 +1,101 @@
 # ChatGPT Memo
 
-ChatGPTの内容を題目ごとに整理できる、シンプルなメモアプリです。
+Simple memo app for saving and browsing ChatGPT notes.
 
-## 主な機能
+## Features
 
-- 左上の三本線で開閉できる目次
-- 題目と本文の検索
-- 画像添付
-- 画像の長押しでサイズ変更
-- メモの編集と削除
-- JSONファイルでの保存と読み込み
-- PWA対応
+- Add, edit, and delete memos
+- Load saved memo data
+- Import and export JSON files
+- Installable as a PWA
 
-## ローカル起動
+## Run Locally
+
+On Windows PowerShell, `npm` may be blocked by execution policy. If that happens, use:
 
 ```powershell
-npm start
+npm.cmd start
 ```
 
-起動後は次のURLで開けます。
+Then open:
 
 - `http://localhost:4173`
 
-## VPSデプロイ例
+## Deploy To A VPS
 
-Node.js が入っているVPSで、アプリのフォルダに移動して次を実行します。
+This app does not need a build step. Install Node.js, clone the repo, and keep `server.js` running.
 
-```powershell
-npm start
+### 1. Connect with SSH
+
+```bash
+ssh root@<your-vps-ip>
 ```
 
-常時運用する場合は `pm2` や `systemd` で `node server.js` を常駐化してください。
+### 2. Install Node.js and Git
 
-## Gitの基本手順
+For Ubuntu or Debian:
 
-```powershell
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin <YOUR_GIT_REMOTE_URL>
-git push -u origin main
+```bash
+apt update
+apt install -y git curl
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs
+node -v
+npm -v
 ```
+
+### 3. Clone the app
+
+```bash
+cd /var/www
+git clone https://github.com/summerMK-ops/Memogpt.git
+cd Memogpt
+```
+
+### 4. Test the app
+
+```bash
+npm install
+PORT=4173 npm start
+```
+
+Open:
+
+- `http://<your-vps-ip>:4173`
+
+### 5. Keep it running with PM2
+
+```bash
+npm install -g pm2
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup
+```
+
+Useful checks:
+
+```bash
+pm2 status
+pm2 logs chatgpt-memo
+```
+
+### 6. Open the port
+
+If you use `ufw`:
+
+```bash
+ufw allow 4173/tcp
+ufw status
+```
+
+### 7. Update later
+
+```bash
+cd /var/www/Memogpt
+git pull origin main
+pm2 restart chatgpt-memo
+```
+
+## Optional Next Step
+
+For production, it is better to put Nginx in front and serve the app from a domain with HTTPS.

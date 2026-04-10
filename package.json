@@ -2,7 +2,7 @@
   "name": "chatgpt-memo-app",
   "version": "1.0.0",
   "private": true,
-  "description": "ChatGPTの内容を題目ごとに整理するメモアプリ",
+  "description": "Simple memo app for saving and managing ChatGPT notes",
   "scripts": {
     "start": "node server.js"
   }
