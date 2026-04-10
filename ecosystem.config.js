@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: "chatgpt-memo",
+      name: "memogpt",
       script: "server.js",
       cwd: __dirname,
       env: {

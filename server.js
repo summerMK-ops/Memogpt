@@ -1,57 +1,33 @@
-const http = require("http");
-const fs = require("fs");
+const express = require("express");
 const path = require("path");
+const { dbPath, getWorkspace, saveWorkspace } = require("./db");
 
-const host = process.env.HOST || "0.0.0.0";
+const app = express();
 const port = Number(process.env.PORT) || 4173;
-const rootDir = __dirname;
+const host = process.env.HOST || "0.0.0.0";
+const distDir = path.join(__dirname, "dist");
 
-const mimeTypes = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".webmanifest": "application/manifest+json; charset=utf-8"
-};
+app.use(express.json({ limit: "20mb" }));
+app.use(express.static(distDir));
 
-const server = http.createServer((request, response) => {
-  const requestPath = decodeURIComponent((request.url || "/").split("?")[0]);
-  const relativePath = requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
-  const filePath = path.resolve(rootDir, relativePath);
-
-  if (!filePath.startsWith(rootDir)) {
-    response.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-    response.end("Forbidden");
-    return;
-  }
-
-  fs.readFile(filePath, (error, content) => {
-    if (error) {
-      if (error.code === "ENOENT") {
-        response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-        response.end("Not Found");
-        return;
-      }
-
-      response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-      response.end("Internal Server Error");
-      return;
-    }
-
-    const ext = path.extname(filePath).toLowerCase();
-    response.writeHead(200, {
-      "Content-Type": mimeTypes[ext] || "application/octet-stream",
-      "Cache-Control": "no-cache"
-    });
-    response.end(content);
-  });
+app.get("/api/health", (_request, response) => {
+  response.json({ ok: true, dbPath });
 });
 
-server.listen(port, host, () => {
-  console.log(`ChatGPT Memo server running at http://localhost:${port}`);
+app.get("/api/workspace", (_request, response) => {
+  response.json(getWorkspace());
+});
+
+app.put("/api/workspace", (request, response) => {
+  const workspace = saveWorkspace(request.body);
+  response.json(workspace);
+});
+
+app.get("*", (_request, response) => {
+  response.sendFile(path.join(distDir, "index.html"));
+});
+
+app.listen(port, host, () => {
+  console.log(`MemoGPT server running at http://localhost:${port}`);
+  console.log(`SQLite database: ${dbPath}`);
 });
