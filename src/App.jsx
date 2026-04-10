@@ -99,10 +99,32 @@ function createNote(folderId, templateBody = "") {
 }
 
 function buildDraftFromNote(note) {
+  const editorText = note.body.trim()
+    ? `${note.title}\n${note.body}`
+    : note.title;
+
   return {
     ...note,
     tagInput: note.tags.join(", "),
-    selectionStart: note.body.length
+    editorText,
+    selectionStart: editorText.length
+  };
+}
+
+function splitEditorText(editorText) {
+  const normalized = editorText.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const firstMeaningfulLine = lines.find((line) => line.trim()) || "Untitled";
+  const firstIndex = lines.findIndex((line) => line.trim());
+
+  if (firstIndex === -1) {
+    return { title: "Untitled", body: "" };
+  }
+
+  const bodyLines = lines.slice(firstIndex + 1);
+  return {
+    title: firstMeaningfulLine.trim(),
+    body: bodyLines.join("\n").replace(/^\n+/, "")
   };
 }
 
@@ -245,9 +267,22 @@ function buildPreview(note, notesByTitle, onJumpToNote) {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
+    const imageMatch = line.trim().match(/^!\[image:([^\]]+)\]$/);
 
     if (!line.trim()) {
       blocks.push(<div key={`space-${index}`} className="preview-space" />);
+      continue;
+    }
+
+    if (imageMatch) {
+      const image = note.images.find((item) => item.id === imageMatch[1]);
+      if (image) {
+        blocks.push(
+          <div key={`image-${index}`} className="inline-image-wrap">
+            <img className="preview-image inline-preview-image" src={image.src} alt={image.name} />
+          </div>
+        );
+      }
       continue;
     }
 
@@ -302,14 +337,9 @@ function buildPreview(note, notesByTitle, onJumpToNote) {
     blocks.push(<p key={index}>{renderInline(line, notesByTitle, onJumpToNote)}</p>);
   }
 
-  const images = note.images.map((image, index) => (
-    <img key={`${image.name}-${index}`} className="preview-image" src={image.src} alt={image.name} />
-  ));
-
   return (
     <>
       <div className="preview-body">{blocks}</div>
-      {images.length > 0 && <div className="preview-gallery">{images}</div>}
     </>
   );
 }
@@ -330,7 +360,7 @@ function getActiveSlashState(body, selectionStart) {
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve({ src: reader.result, name: file.name });
+    reader.onload = () => resolve({ id: createId(), src: reader.result, name: file.name });
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -350,6 +380,7 @@ function isWithinLastDays(value, days) {
 
 function noteSnippet(note) {
   const text = note.body
+    .replace(/!\[image:[^\]]+\]/g, " ")
     .replace(/[#>\-\[\]\|]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -357,7 +388,17 @@ function noteSnippet(note) {
   return text || "メモ";
 }
 
-function AppleSection({ title, notes, workspace, selectedNote, onSelect }) {
+function AppleSection({
+  title,
+  notes,
+  workspace,
+  selectedNote,
+  swipedNoteId,
+  setSwipedNoteId,
+  onTogglePin,
+  onDelete,
+  onSelect
+}) {
   if (!notes.length) {
     return null;
   }
@@ -370,30 +411,103 @@ function AppleSection({ title, notes, workspace, selectedNote, onSelect }) {
       </div>
       <div className="apple-note-group">
         {notes.map((note) => (
-          <button
+          <SwipeableNoteRow
             key={note.id}
-            className={`apple-note-card ${selectedNote?.id === note.id ? "is-active" : ""}`}
-            type="button"
-            onClick={() => onSelect(note.id)}
-          >
-            <div className="apple-note-main">
-              <strong>{note.title}</strong>
-              <div className="apple-note-meta">
-                <span>{formatWhen(note.updatedAt)}</span>
-                <span>{noteSnippet(note)}</span>
-              </div>
-              <div className="apple-note-folder">
-                <span>🗂</span>
-                <span>{workspace.folders.find((folder) => folder.id === note.folderId)?.name || "メモ"}</span>
-              </div>
-            </div>
-            {note.images[0] && (
-              <img className="apple-note-thumb" src={note.images[0].src} alt={note.images[0].name} />
-            )}
-          </button>
+            note={note}
+            folderName={workspace.folders.find((folder) => folder.id === note.folderId)?.name || "メモ"}
+            isActive={selectedNote?.id === note.id}
+            isOpen={swipedNoteId === note.id}
+            onOpen={() => setSwipedNoteId(note.id)}
+            onClose={() => setSwipedNoteId(null)}
+            onSelect={() => onSelect(note.id)}
+            onTogglePin={() => onTogglePin(note.id)}
+            onDelete={() => onDelete(note.id)}
+          />
         ))}
       </div>
     </section>
+  );
+}
+
+function SwipeableNoteRow({
+  note,
+  folderName,
+  isActive,
+  isOpen,
+  onOpen,
+  onClose,
+  onSelect,
+  onTogglePin,
+  onDelete
+}) {
+  const touchStartXRef = useRef(0);
+  const touchDeltaRef = useRef(0);
+
+  function handleTouchStart(event) {
+    touchStartXRef.current = event.touches[0].clientX;
+    touchDeltaRef.current = 0;
+  }
+
+  function handleTouchMove(event) {
+    touchDeltaRef.current = event.touches[0].clientX - touchStartXRef.current;
+  }
+
+  function handleTouchEnd() {
+    if (touchDeltaRef.current < -36) {
+      onOpen();
+      return;
+    }
+
+    if (touchDeltaRef.current > 36) {
+      onClose();
+      return;
+    }
+
+    if (!isOpen) {
+      onSelect();
+    }
+  }
+
+  return (
+    <div className={`swipe-row ${isOpen ? "is-open" : ""}`}>
+      <div className="swipe-actions">
+        <button className="swipe-action swipe-pin" type="button" onClick={onTogglePin}>
+          {note.pinned ? "Unpin" : "Pin"}
+        </button>
+        <button className="swipe-action swipe-delete" type="button" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
+      <button
+        className={`apple-note-card ${isActive ? "is-active" : ""}`}
+        type="button"
+        onClick={() => {
+          if (isOpen) {
+            onClose();
+            return;
+          }
+          onSelect();
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="apple-note-main">
+          <strong>{note.title}</strong>
+          <div className="apple-note-meta">
+            <span>{formatWhen(note.updatedAt)}</span>
+            <span>{noteSnippet(note)}</span>
+          </div>
+          <div className="apple-note-folder">
+            <span>🗂</span>
+            <span>{folderName}</span>
+          </div>
+        </div>
+        {note.images[0] && (
+          <img className="apple-note-thumb" src={note.images[0].src} alt={note.images[0].name} />
+        )}
+      </button>
+    </div>
   );
 }
 
@@ -402,12 +516,14 @@ function draftMatchesNote(draft, note) {
     return false;
   }
 
+  const parsed = splitEditorText(draft.editorText);
+
   return (
-    (draft.title.trim() || "Untitled") === note.title
+    parsed.title === note.title
     && draft.folderId === note.folderId
     && JSON.stringify(parseTags(draft.tagInput)) === JSON.stringify(note.tags)
     && draft.pinned === note.pinned
-    && draft.body === note.body
+    && parsed.body === note.body
     && JSON.stringify(draft.images) === JSON.stringify(note.images)
   );
 }
@@ -424,6 +540,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [mobileMode, setMobileMode] = useState("list");
+  const [swipedNoteId, setSwipedNoteId] = useState(null);
   const saveTimerRef = useRef(null);
 
   const notesByTitle = useMemo(() => {
@@ -465,7 +582,7 @@ export default function App() {
   const weekNotes = filteredNotes.filter((note) => isWithinLastDays(note.updatedAt, 7) && !isToday(note.updatedAt) && !note.pinned);
   const olderNotes = filteredNotes.filter((note) => !isWithinLastDays(note.updatedAt, 7) && !note.pinned);
 
-  const slashState = draft ? getActiveSlashState(draft.body, draft.selectionStart ?? draft.body.length) : null;
+  const slashState = draft ? getActiveSlashState(draft.editorText, draft.selectionStart ?? draft.editorText.length) : null;
   const visibleCommands = slashState
     ? slashCommands.filter((command) => command.label.toLowerCase().includes(slashState.query))
     : [];
@@ -525,13 +642,14 @@ export default function App() {
     setSaveState("Saving...");
 
     saveTimerRef.current = setTimeout(() => {
+      const parsed = splitEditorText(draft.editorText);
       const nextNote = {
         ...selectedNote,
-        title: draft.title.trim() || "Untitled",
+        title: parsed.title,
         folderId: draft.folderId,
         tags: parseTags(draft.tagInput),
         pinned: draft.pinned,
-        body: draft.body,
+        body: parsed.body,
         images: draft.images,
         updatedAt: new Date().toISOString()
       };
@@ -669,17 +787,59 @@ export default function App() {
     setWorkspaceAndPersist({ ...workspace, notes: nextNotes }, nextNotes[0]?.id || null);
   }
 
+  function handleTogglePin(noteId) {
+    if (!workspace) {
+      return;
+    }
+
+    const target = workspace.notes.find((note) => note.id === noteId);
+    if (!target) {
+      return;
+    }
+
+    const nextWorkspace = {
+      ...workspace,
+      notes: workspace.notes.map((note) => (
+        note.id === noteId
+          ? { ...note, pinned: !note.pinned, updatedAt: new Date().toISOString() }
+          : note
+      ))
+    };
+
+    setSwipedNoteId(null);
+    setWorkspaceAndPersist(nextWorkspace, selectedNoteId);
+  }
+
+  function handleDeleteFromList(noteId) {
+    if (!workspace) {
+      return;
+    }
+
+    const target = workspace.notes.find((note) => note.id === noteId);
+    if (!target) {
+      return;
+    }
+
+    if (!window.confirm(`Delete "${target.title}"?`)) {
+      return;
+    }
+
+    const nextNotes = workspace.notes.filter((note) => note.id !== noteId);
+    setSwipedNoteId(null);
+    setWorkspaceAndPersist({ ...workspace, notes: nextNotes }, nextNotes[0]?.id || null);
+  }
+
   function applySlashCommand(command) {
     if (!draft || !slashState) {
       return;
     }
 
     const start = slashState.lineStart;
-    const currentCursor = draft.selectionStart ?? draft.body.length;
-    const nextBody = `${draft.body.slice(0, start)}${command.snippet}${draft.body.slice(currentCursor)}`;
+    const currentCursor = draft.selectionStart ?? draft.editorText.length;
+    const nextBody = `${draft.editorText.slice(0, start)}${command.snippet}${draft.editorText.slice(currentCursor)}`;
     setDraft({
       ...draft,
-      body: nextBody,
+      editorText: nextBody,
       selectionStart: start + command.snippet.length
     });
   }
@@ -691,22 +851,17 @@ export default function App() {
     }
 
     const images = await Promise.all(files.map(fileToDataUrl));
+    const selectionStart = draft.selectionStart ?? draft.editorText.length;
+    const markerText = images.map((image) => `\n![image:${image.id}]\n`).join("");
+    const nextEditorText = `${draft.editorText.slice(0, selectionStart)}${markerText}${draft.editorText.slice(selectionStart)}`;
+
     setDraft({
       ...draft,
-      images: [...draft.images, ...images]
+      editorText: nextEditorText,
+      images: [...draft.images, ...images],
+      selectionStart: selectionStart + markerText.length
     });
     event.target.value = "";
-  }
-
-  function removeDraftImage(indexToRemove) {
-    if (!draft) {
-      return;
-    }
-
-    setDraft({
-      ...draft,
-      images: draft.images.filter((_, index) => index !== indexToRemove)
-    });
   }
 
   function jumpToNote(noteId) {
@@ -838,6 +993,10 @@ export default function App() {
                   notes={pinnedNotes}
                   workspace={workspace}
                   selectedNote={selectedNote}
+                  swipedNoteId={swipedNoteId}
+                  setSwipedNoteId={setSwipedNoteId}
+                  onTogglePin={handleTogglePin}
+                  onDelete={handleDeleteFromList}
                   onSelect={(noteId) => {
                     setSelectedNoteId(noteId);
                     setMobileMode("detail");
@@ -850,6 +1009,10 @@ export default function App() {
                 notes={todayNotes}
                 workspace={workspace}
                 selectedNote={selectedNote}
+                swipedNoteId={swipedNoteId}
+                setSwipedNoteId={setSwipedNoteId}
+                onTogglePin={handleTogglePin}
+                onDelete={handleDeleteFromList}
                 onSelect={(noteId) => {
                   setSelectedNoteId(noteId);
                   setMobileMode("detail");
@@ -861,6 +1024,10 @@ export default function App() {
                 notes={weekNotes}
                 workspace={workspace}
                 selectedNote={selectedNote}
+                swipedNoteId={swipedNoteId}
+                setSwipedNoteId={setSwipedNoteId}
+                onTogglePin={handleTogglePin}
+                onDelete={handleDeleteFromList}
                 onSelect={(noteId) => {
                   setSelectedNoteId(noteId);
                   setMobileMode("detail");
@@ -873,6 +1040,10 @@ export default function App() {
                   notes={olderNotes}
                   workspace={workspace}
                   selectedNote={selectedNote}
+                  swipedNoteId={swipedNoteId}
+                  setSwipedNoteId={setSwipedNoteId}
+                  onTogglePin={handleTogglePin}
+                  onDelete={handleDeleteFromList}
                   onSelect={(noteId) => {
                     setSelectedNoteId(noteId);
                     setMobileMode("detail");
@@ -884,7 +1055,6 @@ export default function App() {
 
             <footer className="notes-footer">
               <span>{workspace.notes.length}件のメモ</span>
-              <button className="compose-button" type="button" onClick={handleCreateNote}>✎</button>
             </footer>
           </div>
 
@@ -901,42 +1071,14 @@ export default function App() {
                   </div>
                 </header>
 
-                <div className="editor-form apple-editor-form">
-                  <input className="title-input apple-title-input" value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} placeholder="タイトル" />
-
-                  <div className="editor-meta-grid apple-meta-grid">
-                    <label>
-                      <span>Folder</span>
-                      <select value={draft.folderId} onChange={(event) => updateDraft("folderId", event.target.value)}>
-                        {workspace.folders.map((folder) => (
-                          <option key={folder.id} value={folder.id}>{folder.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Tags</span>
-                      <input value={draft.tagInput} onChange={(event) => updateDraft("tagInput", event.target.value)} placeholder="idea, task, design" />
-                    </label>
-                  </div>
-
-                  <div className="toolbar-row">
-                    <label className="pin-toggle">
-                      <input type="checkbox" checked={draft.pinned} onChange={(event) => updateDraft("pinned", event.target.checked)} />
-                      <span>Pin note</span>
-                    </label>
-                    <label className="image-upload">
-                      <span>Add images</span>
-                      <input type="file" accept="image/*" multiple onChange={handleImageChange} />
-                    </label>
-                  </div>
-
+                  <div className="editor-form apple-editor-form">
                   <div className="helper-copy apple-helper-copy">/ でブロック追加、#tag と [[ノート名]] で整理</div>
 
                   <div className="editor-area-wrap">
                     <textarea
                       className="editor-area apple-editor-area"
-                      value={draft.body}
-                      onChange={(event) => updateDraft("body", event.target.value)}
+                      value={draft.editorText}
+                      onChange={(event) => updateDraft("editorText", event.target.value)}
                       onClick={(event) => updateDraft("selectionStart", event.target.selectionStart)}
                       onKeyUp={(event) => updateDraft("selectionStart", event.currentTarget.selectionStart)}
                       onSelect={(event) => updateDraft("selectionStart", event.currentTarget.selectionStart)}
@@ -955,17 +1097,6 @@ export default function App() {
                     )}
                   </div>
 
-                  {draft.images.length > 0 && (
-                    <div className="image-strip">
-                      {draft.images.map((image, index) => (
-                        <div key={`${image.name}-${index}`} className="image-card">
-                          <img src={image.src} alt={image.name} />
-                          <button className="ghost-button" type="button" onClick={() => removeDraftImage(index)}>Remove</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
                   <div className="save-line">
                     <span>{saveState}</span>
                     <span>{draft.images.length} 枚の画像</span>
@@ -974,7 +1105,7 @@ export default function App() {
 
                   <div className="detail-bottom-bar">
                     <button className="bottom-icon" type="button" onClick={() => setMobileMode("list")}>☰</button>
-                    <label className="bottom-icon image-upload">
+                    <label className="bottom-icon image-upload bottom-upload">
                       <span>📎</span>
                       <input type="file" accept="image/*" multiple onChange={handleImageChange} />
                     </label>
@@ -998,19 +1129,28 @@ export default function App() {
             {draft ? (
               <>
                 <div className="preview-header">
-                  <h2>{draft.title || "Untitled"}</h2>
+                  <h2>{splitEditorText(draft.editorText).title || "Untitled"}</h2>
                   <div className="tag-row">
                     {parseTags(draft.tagInput).map((tag) => <span key={tag} className="tag-chip">#{tag}</span>)}
                     {draft.pinned && <span className="pill">Pinned</span>}
                   </div>
                 </div>
-                {buildPreview({ ...draft, tags: parseTags(draft.tagInput) }, notesByTitle, jumpToNote)}
+                {buildPreview({
+                  ...draft,
+                  title: splitEditorText(draft.editorText).title,
+                  body: splitEditorText(draft.editorText).body,
+                  tags: parseTags(draft.tagInput)
+                }, notesByTitle, jumpToNote)}
               </>
             ) : (
               <div className="empty-state">Preview appears here.</div>
             )}
           </div>
         </section>
+
+        <button className="floating-compose-button" type="button" onClick={handleCreateNote}>
+          ✎
+        </button>
       </main>
     </div>
   );
