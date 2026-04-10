@@ -21,13 +21,21 @@ const noteTemplates = [
   }
 ];
 
+function createId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `id-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
 function createFallbackWorkspace() {
-  const inboxId = crypto.randomUUID();
-  const workId = crypto.randomUUID();
-  const ideasId = crypto.randomUUID();
+  const inboxId = createId();
+  const workId = createId();
+  const ideasId = createId();
   const now = new Date().toISOString();
-  const welcomeId = crypto.randomUUID();
-  const visionId = crypto.randomUUID();
+  const welcomeId = createId();
+  const visionId = createId();
 
   return {
     folders: [
@@ -78,7 +86,7 @@ function createFallbackWorkspace() {
 function createNote(folderId, templateBody = "") {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
+    id: createId(),
     title: "Untitled",
     folderId,
     tags: [],
@@ -108,7 +116,7 @@ function normalizeWorkspace(candidate) {
     ? candidate.folders
         .filter((folder) => folder && typeof folder.name === "string")
         .map((folder) => ({
-          id: typeof folder.id === "string" ? folder.id : crypto.randomUUID(),
+          id: typeof folder.id === "string" ? folder.id : createId(),
           name: folder.name.trim() || "Untitled"
         }))
     : fallback.folders;
@@ -120,7 +128,7 @@ function normalizeWorkspace(candidate) {
     ? candidate.notes
         .filter((note) => note && typeof note.title === "string")
         .map((note) => ({
-          id: typeof note.id === "string" ? note.id : crypto.randomUUID(),
+          id: typeof note.id === "string" ? note.id : createId(),
           title: note.title.trim() || "Untitled",
           folderId: folderIds.has(note.folderId) ? note.folderId : firstFolderId,
           tags: Array.isArray(note.tags)
@@ -531,7 +539,7 @@ export default function App() {
       return;
     }
 
-    const folder = { id: crypto.randomUUID(), name: name.trim() };
+    const folder = { id: createId(), name: name.trim() };
     const nextWorkspace = {
       ...workspace,
       folders: [...workspace.folders, folder]
@@ -566,7 +574,7 @@ export default function App() {
     const now = new Date().toISOString();
     const duplicate = {
       ...selectedNote,
-      id: crypto.randomUUID(),
+      id: createId(),
       title: `${selectedNote.title} copy`,
       images: selectedNote.images.map((image) => ({ ...image })),
       createdAt: now,
