@@ -1,26 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const slashCommands = [
-  { id: "heading", label: "Heading", snippet: "## New Section\n" },
-  { id: "todo", label: "Checklist", snippet: "- [ ] New task\n" },
-  { id: "callout", label: "Callout", snippet: "> Important note\n" },
-  { id: "table", label: "Table", snippet: "| Name | Status |\n| --- | --- |\n| Item | Active |\n" }
-];
-
-const noteTemplates = [
-  { id: "blank", label: "Blank", body: "" },
-  {
-    id: "meeting",
-    label: "Meeting",
-    body: "## Meeting\n- Date: \n- Attendees: \n\n## Agenda\n- \n\n## Notes\n- \n\n## Action items\n- [ ] "
-  },
-  {
-    id: "daily",
-    label: "Daily",
-    body: "## Today\n\n## Focus\n- [ ] \n\n## Notes\n\n## Wrap up\n"
-  }
-];
-
 function createId() {
   if (globalThis.crypto?.randomUUID) {
     return globalThis.crypto.randomUUID();
@@ -34,8 +13,6 @@ function createFallbackWorkspace() {
   const workId = createId();
   const ideasId = createId();
   const now = new Date().toISOString();
-  const welcomeId = createId();
-  const visionId = createId();
 
   return {
     folders: [
@@ -45,36 +22,29 @@ function createFallbackWorkspace() {
     ],
     notes: [
       {
-        id: welcomeId,
-        title: "Welcome to MemoGPT",
+        id: createId(),
+        title: "Chatgpt の内容をメモまとめるアプリ",
         folderId: inboxId,
-        tags: ["welcome", "mvp"],
+        tags: ["welcome", "memo"],
         pinned: true,
         body: [
-          "## Start here",
-          "- [ ] Add a quick note",
-          "- [ ] Attach an image",
-          "- [ ] Link another note with [[Product Vision]]"
-        ].join("\n"),
+          "<h1>Chatgpt の内容をメモまとめるアプリ</h1>",
+          "<p>目次付き</p>",
+          "<p>自動詞他動詞</p>",
+          "<p>検索機能</p>",
+          "<p>画像も貼れる</p>"
+        ].join(""),
         images: [],
         createdAt: now,
         updatedAt: now
       },
       {
-        id: visionId,
-        title: "Product Vision",
-        folderId: ideasId,
-        tags: ["product", "design"],
+        id: createId(),
+        title: "ワークボート",
+        folderId: workId,
+        tags: ["work"],
         pinned: false,
-        body: [
-          "## Direction",
-          "Apple Notes speed with Notion structure.",
-          "",
-          "| Layer | Focus |",
-          "| --- | --- |",
-          "| Capture | Fast and calm |",
-          "| Organize | Tags, folders, links |"
-        ].join("\n"),
+        body: "<h1>ワークボート</h1><p>月曜日 松下様</p><p>会員</p>",
         images: [],
         createdAt: now,
         updatedAt: now
@@ -83,49 +53,29 @@ function createFallbackWorkspace() {
   };
 }
 
-function createNote(folderId, templateBody = "") {
-  const now = new Date().toISOString();
-  return {
-    id: createId(),
-    title: "Untitled",
-    folderId,
-    tags: [],
-    pinned: false,
-    body: templateBody,
-    images: [],
-    createdAt: now,
-    updatedAt: now
-  };
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
-function buildDraftFromNote(note) {
-  const editorText = note.body.trim()
-    ? `${note.title}\n${note.body}`
-    : note.title;
+function legacyBodyToHtml(title, body, images = []) {
+  const lines = (body || "").split("\n");
+  const html = [
+    `<h1>${escapeHtml(title || "Untitled")}</h1>`,
+    ...lines.map((line) => {
+      if (!line.trim()) {
+        return "<p><br></p>";
+      }
+      return `<p>${escapeHtml(line)}</p>`;
+    }),
+    ...images.map((image) => `<figure class="editor-image"><img src="${image.src}" alt="${escapeHtml(image.name || "image")}"></figure>`)
+  ];
 
-  return {
-    ...note,
-    tagInput: note.tags.join(", "),
-    editorText,
-    selectionStart: editorText.length
-  };
-}
-
-function splitEditorText(editorText) {
-  const normalized = editorText.replace(/\r\n/g, "\n");
-  const lines = normalized.split("\n");
-  const firstMeaningfulLine = lines.find((line) => line.trim()) || "Untitled";
-  const firstIndex = lines.findIndex((line) => line.trim());
-
-  if (firstIndex === -1) {
-    return { title: "Untitled", body: "" };
-  }
-
-  const bodyLines = lines.slice(firstIndex + 1);
-  return {
-    title: firstMeaningfulLine.trim(),
-    body: bodyLines.join("\n").replace(/^\n+/, "")
-  };
+  return html.join("");
 }
 
 function normalizeWorkspace(candidate) {
@@ -145,41 +95,89 @@ function normalizeWorkspace(candidate) {
 
   const firstFolderId = folders[0].id;
   const folderIds = new Set(folders.map((folder) => folder.id));
-
-  const notes = Array.isArray(candidate.notes)
+  const notes = Array.isArray(candidate.notes) && candidate.notes.length
     ? candidate.notes
         .filter((note) => note && typeof note.title === "string")
-        .map((note) => ({
-          id: typeof note.id === "string" ? note.id : createId(),
-          title: note.title.trim() || "Untitled",
-          folderId: folderIds.has(note.folderId) ? note.folderId : firstFolderId,
-          tags: Array.isArray(note.tags)
-            ? note.tags.filter((tag) => typeof tag === "string").map((tag) => tag.toLowerCase())
-            : [],
-          pinned: Boolean(note.pinned),
-          body: typeof note.body === "string" ? note.body : "",
-          images: Array.isArray(note.images)
+        .map((note) => {
+          const images = Array.isArray(note.images)
             ? note.images
                 .filter((image) => image && typeof image.src === "string")
-                .map((image) => ({ src: image.src, name: typeof image.name === "string" ? image.name : "image" }))
-            : [],
-          createdAt: typeof note.createdAt === "string" ? note.createdAt : new Date().toISOString(),
-          updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : new Date().toISOString()
-        }))
+                .map((image) => ({
+                  src: image.src,
+                  name: typeof image.name === "string" ? image.name : "image"
+                }))
+            : [];
+
+          const body = typeof note.body === "string" && note.body.includes("<")
+            ? note.body
+            : legacyBodyToHtml(note.title, typeof note.body === "string" ? note.body : "", images);
+
+          return {
+            id: typeof note.id === "string" ? note.id : createId(),
+            title: note.title.trim() || "Untitled",
+            folderId: folderIds.has(note.folderId) ? note.folderId : firstFolderId,
+            tags: Array.isArray(note.tags)
+              ? note.tags.filter((tag) => typeof tag === "string").map((tag) => tag.toLowerCase())
+              : [],
+            pinned: Boolean(note.pinned),
+            body,
+            images: [],
+            isDraft: false,
+            createdAt: typeof note.createdAt === "string" ? note.createdAt : new Date().toISOString(),
+            updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : new Date().toISOString()
+          };
+        })
     : fallback.notes;
 
+  return { folders, notes };
+}
+
+function createNote(folderId) {
+  const now = new Date().toISOString();
   return {
-    folders,
-    notes: notes.length ? notes : fallback.notes
+    id: createId(),
+    title: "",
+    folderId,
+    tags: [],
+    pinned: false,
+    body: "<h1><br></h1><p><br></p>",
+    images: [],
+    isDraft: true,
+    createdAt: now,
+    updatedAt: now
   };
 }
 
-function parseTags(value) {
-  return value
-    .split(",")
-    .map((tag) => tag.trim().replace(/^#/, "").toLowerCase())
-    .filter(Boolean)
-    .filter((tag, index, list) => list.indexOf(tag) === index);
+function htmlToPlainText(html) {
+  const temporary = document.createElement("div");
+  temporary.innerHTML = html;
+  return temporary.textContent?.replace(/\s+/g, " ").trim() || "";
+}
+
+function extractTitleFromHtml(html) {
+  const temporary = document.createElement("div");
+  temporary.innerHTML = html;
+  const firstBlock = temporary.querySelector("h1, h2, h3, p, div");
+  const title = firstBlock?.textContent?.trim();
+  return title || "Untitled";
+}
+
+function isMeaningfulHtml(html) {
+  const temporary = document.createElement("div");
+  temporary.innerHTML = html;
+  const hasText = temporary.textContent?.replace(/\s+/g, "").trim();
+  const hasImage = temporary.querySelector("img, figure");
+  return Boolean(hasText || hasImage);
+}
+
+function extractSnippetFromHtml(html) {
+  const temporary = document.createElement("div");
+  temporary.innerHTML = html;
+  const blocks = Array.from(temporary.children)
+    .map((node) => node.textContent?.trim() || "")
+    .filter(Boolean);
+
+  return blocks.slice(1).join(" ").slice(0, 96) || "メモ";
 }
 
 function formatWhen(value) {
@@ -191,213 +189,38 @@ function formatWhen(value) {
   }).format(new Date(value));
 }
 
-function renderTable(lines, keyPrefix) {
-  const rows = lines.map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()));
-  const header = rows[0] || [];
-  const body = rows.slice(2);
-
-  return (
-    <div key={`table-${keyPrefix}`} className="preview-table-wrap">
-      <table className="preview-table">
-        <thead>
-          <tr>
-            {header.map((cell, index) => <th key={index}>{cell}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {body.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function renderInline(text, notesByTitle, onJumpToNote) {
-  const parts = [];
-  let cursor = 0;
-  const pattern = /(\[\[(.+?)\]\]|#[\p{L}\p{N}_-]+|@[\p{L}\p{N}_-]+)/gu;
-  let match = pattern.exec(text);
-
-  while (match) {
-    if (match.index > cursor) {
-      parts.push(text.slice(cursor, match.index));
-    }
-
-    const token = match[0];
-    if (token.startsWith("#")) {
-      parts.push(<span key={`${token}-${match.index}`} className="inline-token inline-tag">{token}</span>);
-    } else {
-      const rawTitle = token.startsWith("[[") ? match[2] : token.slice(1).replaceAll("-", " ");
-      const linked = notesByTitle.get(rawTitle.trim().toLowerCase());
-
-      if (linked) {
-        parts.push(
-          <button
-            key={`${token}-${match.index}`}
-            className="inline-token inline-link"
-            type="button"
-            onClick={() => onJumpToNote(linked.id)}
-          >
-            {token}
-          </button>
-        );
-      } else {
-        parts.push(<span key={`${token}-${match.index}`} className="inline-token inline-muted">{token}</span>);
-      }
-    }
-
-    cursor = match.index + token.length;
-    match = pattern.exec(text);
-  }
-
-  if (cursor < text.length) {
-    parts.push(text.slice(cursor));
-  }
-
-  return parts;
-}
-
-function buildPreview(note, notesByTitle, onJumpToNote) {
-  const lines = note.body.split("\n");
-  const blocks = [];
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const imageMatch = line.trim().match(/^!\[image:([^\]]+)\]$/);
-
-    if (!line.trim()) {
-      blocks.push(<div key={`space-${index}`} className="preview-space" />);
-      continue;
-    }
-
-    if (imageMatch) {
-      const image = note.images.find((item) => item.id === imageMatch[1]);
-      if (image) {
-        blocks.push(
-          <div key={`image-${index}`} className="inline-image-wrap">
-            <img className="preview-image inline-preview-image" src={image.src} alt={image.name} />
-          </div>
-        );
-      }
-      continue;
-    }
-
-    if (line.startsWith("|")) {
-      const tableLines = [line];
-      let next = index + 1;
-      while (next < lines.length && lines[next].startsWith("|")) {
-        tableLines.push(lines[next]);
-        next += 1;
-      }
-      blocks.push(renderTable(tableLines, index));
-      index = next - 1;
-      continue;
-    }
-
-    if (line.startsWith("### ")) {
-      blocks.push(<h4 key={index}>{renderInline(line.slice(4), notesByTitle, onJumpToNote)}</h4>);
-      continue;
-    }
-
-    if (line.startsWith("## ")) {
-      blocks.push(<h3 key={index}>{renderInline(line.slice(3), notesByTitle, onJumpToNote)}</h3>);
-      continue;
-    }
-
-    if (line.startsWith("# ")) {
-      blocks.push(<h2 key={index}>{renderInline(line.slice(2), notesByTitle, onJumpToNote)}</h2>);
-      continue;
-    }
-
-    if (line.startsWith("- [ ] ") || line.startsWith("- [x] ") || line.startsWith("- [X] ")) {
-      const checked = line[3].toLowerCase() === "x";
-      blocks.push(
-        <label key={index} className="preview-check">
-          <input type="checkbox" checked={checked} readOnly />
-          <span>{renderInline(line.slice(6), notesByTitle, onJumpToNote)}</span>
-        </label>
-      );
-      continue;
-    }
-
-    if (line.startsWith("- ")) {
-      blocks.push(<p key={index} className="preview-bullet">• {renderInline(line.slice(2), notesByTitle, onJumpToNote)}</p>);
-      continue;
-    }
-
-    if (line.startsWith("> ")) {
-      blocks.push(<blockquote key={index}>{renderInline(line.slice(2), notesByTitle, onJumpToNote)}</blockquote>);
-      continue;
-    }
-
-    blocks.push(<p key={index}>{renderInline(line, notesByTitle, onJumpToNote)}</p>);
-  }
-
-  return (
-    <>
-      <div className="preview-body">{blocks}</div>
-    </>
-  );
-}
-
-function getActiveSlashState(body, selectionStart) {
-  const before = body.slice(0, selectionStart);
-  const line = before.slice(before.lastIndexOf("\n") + 1);
-  if (!line.startsWith("/")) {
-    return null;
-  }
-
-  return {
-    query: line.slice(1).toLowerCase(),
-    lineStart: before.lastIndexOf("\n") + 1
-  };
-}
-
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve({ id: createId(), src: reader.result, name: file.name });
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 function isToday(value) {
+  const target = new Date(value);
   const today = new Date();
-  const date = new Date(value);
-  return today.toDateString() === date.toDateString();
+  return target.toDateString() === today.toDateString();
 }
 
 function isWithinLastDays(value, days) {
-  const date = new Date(value);
-  const diff = Date.now() - date.getTime();
-  return diff <= days * 24 * 60 * 60 * 1000;
+  const target = new Date(value).getTime();
+  return Date.now() - target <= days * 24 * 60 * 60 * 1000;
 }
 
-function noteSnippet(note) {
-  const text = note.body
-    .replace(/!\[image:[^\]]+\]/g, " ")
-    .replace(/[#>\-\[\]\|]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return text || "メモ";
+function useGroupedNotes(notes) {
+  return useMemo(() => ({
+    pinned: notes.filter((note) => note.pinned),
+    today: notes.filter((note) => isToday(note.updatedAt) && !note.pinned),
+    week: notes.filter((note) => isWithinLastDays(note.updatedAt, 7) && !isToday(note.updatedAt) && !note.pinned),
+    older: notes.filter((note) => !isWithinLastDays(note.updatedAt, 7) && !note.pinned)
+  }), [notes]);
 }
 
 function AppleSection({
   title,
   notes,
-  workspace,
-  selectedNote,
+  folderNameById,
+  selectedNoteId,
+  selectionMode,
+  selectedNoteIds,
   swipedNoteId,
   setSwipedNoteId,
-  onTogglePin,
+  onSelect,
   onDelete,
-  onSelect
+  onTogglePin
 }) {
   if (!notes.length) {
     return null;
@@ -414,14 +237,16 @@ function AppleSection({
           <SwipeableNoteRow
             key={note.id}
             note={note}
-            folderName={workspace.folders.find((folder) => folder.id === note.folderId)?.name || "メモ"}
-            isActive={selectedNote?.id === note.id}
+            folderName={folderNameById.get(note.folderId) || "メモ"}
+            isActive={selectedNoteId === note.id}
+            selectionMode={selectionMode}
+            isSelected={selectedNoteIds.includes(note.id)}
             isOpen={swipedNoteId === note.id}
             onOpen={() => setSwipedNoteId(note.id)}
             onClose={() => setSwipedNoteId(null)}
             onSelect={() => onSelect(note.id)}
-            onTogglePin={() => onTogglePin(note.id)}
             onDelete={() => onDelete(note.id)}
+            onTogglePin={() => onTogglePin(note.id)}
           />
         ))}
       </div>
@@ -433,51 +258,63 @@ function SwipeableNoteRow({
   note,
   folderName,
   isActive,
+  selectionMode,
+  isSelected,
   isOpen,
   onOpen,
   onClose,
   onSelect,
-  onTogglePin,
-  onDelete
+  onDelete,
+  onTogglePin
 }) {
-  const touchStartXRef = useRef(0);
-  const touchStartYRef = useRef(0);
-  const touchDeltaRef = useRef(0);
-  const touchMovedRef = useRef(false);
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const moved = useRef(false);
+  const deltaX = useRef(0);
 
   function handleTouchStart(event) {
-    touchStartXRef.current = event.touches[0].clientX;
-    touchStartYRef.current = event.touches[0].clientY;
-    touchDeltaRef.current = 0;
-    touchMovedRef.current = false;
+    touchStartX.current = event.touches[0].clientX;
+    touchStartY.current = event.touches[0].clientY;
+    moved.current = false;
+    deltaX.current = 0;
   }
 
   function handleTouchMove(event) {
-    touchDeltaRef.current = event.touches[0].clientX - touchStartXRef.current;
-    const deltaY = event.touches[0].clientY - touchStartYRef.current;
-    if (Math.abs(deltaY) > 10 || Math.abs(touchDeltaRef.current) > 10) {
-      touchMovedRef.current = true;
+    if (selectionMode) {
+      return;
+    }
+    deltaX.current = event.touches[0].clientX - touchStartX.current;
+    const deltaY = event.touches[0].clientY - touchStartY.current;
+    if (Math.abs(deltaX.current) > 10 || Math.abs(deltaY) > 10) {
+      moved.current = true;
     }
   }
 
   function handleTouchEnd() {
-    if (touchDeltaRef.current < -36) {
+    if (selectionMode) {
+      if (!moved.current) {
+        onSelect();
+      }
+      return;
+    }
+
+    if (deltaX.current < -36) {
       onOpen();
       return;
     }
 
-    if (touchDeltaRef.current > 36) {
+    if (deltaX.current > 36) {
       onClose();
       return;
     }
 
-    if (!touchMovedRef.current && !isOpen) {
+    if (!moved.current && !isOpen) {
       onSelect();
     }
   }
 
   return (
-    <div className={`swipe-row ${isOpen ? "is-open" : ""}`}>
+    <div className={`swipe-row ${isOpen ? "is-open" : ""} ${selectionMode ? "is-selection-mode" : ""}`}>
       <div className="swipe-actions">
         <button className="swipe-action swipe-pin" type="button" onClick={onTogglePin}>
           {note.pinned ? "Unpin" : "Pin"}
@@ -486,12 +323,16 @@ function SwipeableNoteRow({
           Delete
         </button>
       </div>
+
       <button
-        className={`apple-note-card ${isActive ? "is-active" : ""}`}
+        className={`apple-note-card ${isActive ? "is-active" : ""} ${isSelected ? "is-selected" : ""}`}
         type="button"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onClick={() => {
-          if (touchMovedRef.current) {
-            touchMovedRef.current = false;
+          if (moved.current) {
+            moved.current = false;
             return;
           }
           if (isOpen) {
@@ -500,70 +341,75 @@ function SwipeableNoteRow({
           }
           onSelect();
         }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
+        {selectionMode && (
+          <span className={`selection-check ${isSelected ? "is-selected" : ""}`} aria-hidden="true">
+            {isSelected ? "✓" : ""}
+          </span>
+        )}
         <div className="apple-note-main">
           <strong>{note.title}</strong>
           <div className="apple-note-meta">
             <span>{formatWhen(note.updatedAt)}</span>
-            <span>{noteSnippet(note)}</span>
+            <span>{extractSnippetFromHtml(note.body)}</span>
           </div>
           <div className="apple-note-folder">
             <span>🗂</span>
             <span>{folderName}</span>
           </div>
         </div>
-        {note.images[0] && (
-          <img className="apple-note-thumb" src={note.images[0].src} alt={note.images[0].name} />
-        )}
       </button>
     </div>
   );
 }
 
-function draftMatchesNote(draft, note) {
-  if (!draft || !note) {
-    return false;
-  }
-
-  const parsed = splitEditorText(draft.editorText);
-
-  return (
-    parsed.title === note.title
-    && draft.folderId === note.folderId
-    && JSON.stringify(parseTags(draft.tagInput)) === JSON.stringify(note.tags)
-    && draft.pinned === note.pinned
-    && parsed.body === note.body
-    && JSON.stringify(draft.images) === JSON.stringify(note.images)
-  );
-}
-
 export default function App() {
-  const [workspace, setWorkspace] = useState(null);
-  const [activeFolderId, setActiveFolderId] = useState("all");
-  const [search, setSearch] = useState("");
-  const [selectedNoteId, setSelectedNoteId] = useState(null);
-  const [draft, setDraft] = useState(null);
-  const [saveState, setSaveState] = useState("Loading...");
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [templateId, setTemplateId] = useState("blank");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [mobileMode, setMobileMode] = useState("list");
-  const [swipedNoteId, setSwipedNoteId] = useState(null);
-  const [insertMenuOpen, setInsertMenuOpen] = useState(false);
+  const editorRef = useRef(null);
+  const savedRangeRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
   const saveTimerRef = useRef(null);
 
-  const notesByTitle = useMemo(() => {
-    const map = new Map();
-    workspace?.notes.forEach((note) => {
-      map.set(note.title.toLowerCase(), note);
-      map.set(note.title.toLowerCase().replaceAll(" ", "-"), note);
-    });
-    return map;
-  }, [workspace]);
+  const [workspace, setWorkspace] = useState(null);
+  const [selectedNoteId, setSelectedNoteId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [activeFolderId, setActiveFolderId] = useState("all");
+  const [mobileMode, setMobileMode] = useState("list");
+  const [loading, setLoading] = useState(true);
+  const [saveState, setSaveState] = useState("Loading...");
+  const [error, setError] = useState("");
+  const [swipedNoteId, setSwipedNoteId] = useState(null);
+  const [sheet, setSheet] = useState(null);
+  const [draftHtml, setDraftHtml] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedNoteIds, setSelectedNoteIds] = useState([]);
+  const [listMenuOpen, setListMenuOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/workspace")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("load failed");
+        }
+        return response.json();
+      })
+      .then((payload) => {
+        const normalized = normalizeWorkspace(payload);
+        setWorkspace(normalized);
+        setSelectedNoteId(normalized.notes[0]?.id || null);
+      })
+      .catch(() => {
+        const fallback = createFallbackWorkspace();
+        setWorkspace(fallback);
+        setSelectedNoteId(fallback.notes[0]?.id || null);
+        setError("API load failed. Showing fallback data.");
+      })
+      .finally(() => {
+        setLoading(false);
+        setSaveState("Saved");
+      });
+  }, []);
 
   const filteredNotes = useMemo(() => {
     if (!workspace) {
@@ -574,7 +420,7 @@ export default function App() {
       .filter((note) => {
         const matchesFolder = activeFolderId === "all" ? true : note.folderId === activeFolderId;
         const query = search.trim().toLowerCase();
-        const haystack = `${note.title} ${note.body} ${note.tags.join(" ")}`.toLowerCase();
+        const haystack = `${note.title} ${htmlToPlainText(note.body)} ${note.tags.join(" ")}`.toLowerCase();
         return matchesFolder && (!query || haystack.includes(query));
       })
       .sort((left, right) => {
@@ -590,64 +436,36 @@ export default function App() {
     || workspace?.notes[0]
     || null;
 
-  const pinnedNotes = filteredNotes.filter((note) => note.pinned);
-  const todayNotes = filteredNotes.filter((note) => isToday(note.updatedAt) && !note.pinned);
-  const weekNotes = filteredNotes.filter((note) => isWithinLastDays(note.updatedAt, 7) && !isToday(note.updatedAt) && !note.pinned);
-  const olderNotes = filteredNotes.filter((note) => !isWithinLastDays(note.updatedAt, 7) && !note.pinned);
-
-  const slashState = draft ? getActiveSlashState(draft.editorText, draft.selectionStart ?? draft.editorText.length) : null;
-  const visibleCommands = slashState
-    ? slashCommands.filter((command) => command.label.toLowerCase().includes(slashState.query))
-    : [];
-
-  useEffect(() => {
-    fetch("/api/workspace")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to load workspace");
-        }
-        return response.json();
-      })
-      .then((payload) => {
-        const normalized = normalizeWorkspace(payload);
-        setWorkspace(normalized);
-        setSelectedNoteId(normalized.notes[0]?.id || null);
-        setMobileMode("list");
-        setSaveState("Saved");
-      })
-      .catch(() => {
-        const fallback = createFallbackWorkspace();
-        setWorkspace(fallback);
-        setSelectedNoteId(fallback.notes[0]?.id || null);
-        setMobileMode("list");
-        setSaveState("Offline draft");
-        setError("API load failed. Showing fallback data.");
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
+  const grouped = useGroupedNotes(filteredNotes);
+  const folderNameById = useMemo(
+    () => new Map((workspace?.folders || []).map((folder) => [folder.id, folder.name])),
+    [workspace]
+  );
 
   useEffect(() => {
     if (!selectedNote) {
-      setDraft(null);
       return;
     }
 
-    setDraft(buildDraftFromNote(selectedNote));
+    setDraftHtml(selectedNote.body);
+    if (editorRef.current) {
+      editorRef.current.innerHTML = selectedNote.body;
+    }
+    setSheet(null);
   }, [selectedNoteId, selectedNote?.updatedAt]);
 
   useEffect(() => {
-    if (!workspace || !draft || !selectedNote) {
+    if (!workspace || !selectedNote) {
       return undefined;
     }
 
-    if (draft.id !== selectedNote.id) {
+    if (draftHtml === selectedNote.body) {
+      setSaveState(selectedNote.isDraft ? "Not saved" : "Saved");
       return undefined;
     }
 
-    if (draftMatchesNote(draft, selectedNote)) {
-      setSaveState("Saved");
+    if (!isMeaningfulHtml(draftHtml)) {
+      setSaveState(selectedNote.isDraft ? "Not saved" : "Saved");
       return undefined;
     }
 
@@ -655,55 +473,29 @@ export default function App() {
     setSaveState("Saving...");
 
     saveTimerRef.current = setTimeout(() => {
-      const parsed = splitEditorText(draft.editorText);
-      const nextNote = {
-        ...selectedNote,
-        title: parsed.title,
-        folderId: draft.folderId,
-        tags: parseTags(draft.tagInput),
-        pinned: draft.pinned,
-        body: parsed.body,
-        images: draft.images,
-        updatedAt: new Date().toISOString()
-      };
-
+      const nextTitle = extractTitleFromHtml(draftHtml);
       const nextWorkspace = {
         ...workspace,
-        notes: workspace.notes.map((note) => (note.id === nextNote.id ? nextNote : note))
+        notes: workspace.notes.map((note) => (
+          note.id === selectedNote.id
+            ? {
+                ...note,
+                title: nextTitle,
+                body: draftHtml,
+                isDraft: false,
+                updatedAt: new Date().toISOString()
+              }
+            : note
+        ))
       };
 
-      setWorkspace(nextWorkspace);
-
-      fetch("/api/workspace", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextWorkspace)
-      })
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error("Save failed");
-          }
-          return response.json();
-        })
-        .then((payload) => {
-          const normalized = normalizeWorkspace(payload);
-          setWorkspace(normalized);
-          setSaveState("Saved");
-        })
-        .catch(() => {
-          setSaveState("Save failed");
-          setError("Could not save to SQLite right now.");
-        });
-    }, 450);
+      persistWorkspace(nextWorkspace, selectedNote.id);
+    }, 400);
 
     return () => clearTimeout(saveTimerRef.current);
-  }, [draft]);
+  }, [draftHtml]);
 
-  function updateDraft(field, value) {
-    setDraft((current) => (current ? { ...current, [field]: value } : current));
-  }
-
-  function setWorkspaceAndPersist(nextWorkspace, nextSelectedId) {
+  function persistWorkspace(nextWorkspace, nextSelectedId) {
     setWorkspace(nextWorkspace);
     setSelectedNoteId(nextSelectedId);
     setSaveState("Saving...");
@@ -715,12 +507,13 @@ export default function App() {
     })
       .then((response) => {
         if (!response.ok) {
-          throw new Error("Save failed");
+          throw new Error("save failed");
         }
         return response.json();
       })
       .then((payload) => {
-        setWorkspace(normalizeWorkspace(payload));
+        const normalized = normalizeWorkspace(payload);
+        setWorkspace(normalized);
         setSaveState("Saved");
       })
       .catch(() => {
@@ -729,23 +522,147 @@ export default function App() {
       });
   }
 
-  function handleCreateFolder() {
-    if (!workspace) {
+  function saveSelection() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+    savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+  }
+
+  function restoreSelection() {
+    const selection = window.getSelection();
+    if (!selection || !savedRangeRef.current) {
+      return;
+    }
+    selection.removeAllRanges();
+    selection.addRange(savedRangeRef.current);
+  }
+
+  function syncDraftFromEditor() {
+    if (!editorRef.current) {
+      return;
+    }
+    setDraftHtml(editorRef.current.innerHTML);
+    saveSelection();
+  }
+
+  function getCurrentBlock() {
+    restoreSelection();
+    const selection = window.getSelection();
+    const node = selection?.anchorNode;
+    if (!node) {
+      return null;
+    }
+    const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    return element?.closest("h1, h2, h3, p, figure, div");
+  }
+
+  function changeBlockTag(tagName) {
+    const block = getCurrentBlock();
+    if (!block || !editorRef.current || block.tagName.toLowerCase() === "figure") {
       return;
     }
 
-    const name = window.prompt("Folder name");
-    if (!name?.trim()) {
+    const replacement = document.createElement(tagName);
+    replacement.innerHTML = block.innerHTML || "<br>";
+    replacement.className = block.className;
+    if (block.dataset.toc === "true") {
+      replacement.dataset.toc = "true";
+    }
+    block.replaceWith(replacement);
+    setDraftHtml(editorRef.current.innerHTML);
+    setSheet(null);
+  }
+
+  function toggleTocOnBlock() {
+    const block = getCurrentBlock();
+    if (!block || !editorRef.current) {
+      return;
+    }
+    block.dataset.toc = block.dataset.toc === "true" ? "false" : "true";
+    setDraftHtml(editorRef.current.innerHTML);
+    setSheet(null);
+  }
+
+  function applyBlockStyle(attribute, value) {
+    const block = getCurrentBlock();
+    if (!block || !editorRef.current) {
       return;
     }
 
-    const folder = { id: createId(), name: name.trim() };
-    const nextWorkspace = {
-      ...workspace,
-      folders: [...workspace.folders, folder]
-    };
-    setActiveFolderId(folder.id);
-    setWorkspaceAndPersist(nextWorkspace, selectedNoteId);
+    if (value === "clear") {
+      delete block.dataset[attribute];
+    } else {
+      block.dataset[attribute] = value;
+    }
+    setDraftHtml(editorRef.current.innerHTML);
+  }
+
+  function applyBold(weight) {
+    const block = getCurrentBlock();
+    if (!block || !editorRef.current) {
+      return;
+    }
+    block.dataset.weight = weight;
+    setDraftHtml(editorRef.current.innerHTML);
+  }
+
+  function handleUndo() {
+    restoreSelection();
+    document.execCommand("undo");
+    syncDraftFromEditor();
+  }
+
+  function handleRedo() {
+    restoreSelection();
+    document.execCommand("redo");
+    syncDraftFromEditor();
+  }
+
+  function insertImageAtCursor(image) {
+    restoreSelection();
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const figure = document.createElement("figure");
+    figure.className = "editor-image";
+    figure.innerHTML = `<img src="${image.src}" alt="${escapeHtml(image.name)}">`;
+    range.deleteContents();
+    range.insertNode(figure);
+
+    const paragraph = document.createElement("p");
+    paragraph.innerHTML = "<br>";
+    figure.after(paragraph);
+
+    const nextRange = document.createRange();
+    nextRange.setStart(paragraph, 0);
+    nextRange.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    saveSelection();
+    syncDraftFromEditor();
+    setSheet(null);
+  }
+
+  async function handleImageFiles(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) {
+      return;
+    }
+
+    const images = await Promise.all(files.map((file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ src: reader.result, name: file.name });
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    })));
+
+    images.forEach(insertImageAtCursor);
+    event.target.value = "";
   }
 
   function handleCreateNote() {
@@ -754,62 +671,154 @@ export default function App() {
     }
 
     const folderId = activeFolderId === "all" ? workspace.folders[0]?.id : activeFolderId;
-    const template = noteTemplates.find((item) => item.id === templateId);
-    const note = createNote(folderId, template?.body || "");
-    const nextWorkspace = {
-      ...workspace,
-      notes: [note, ...workspace.notes]
-    };
-    setDraft(buildDraftFromNote(note));
-    setSearch("");
-    setMobileSidebarOpen(false);
+    const note = createNote(folderId);
+    const nextWorkspace = { ...workspace, notes: [note, ...workspace.notes] };
+    setSelectionMode(false);
+    setSelectedNoteIds([]);
+    setListMenuOpen(false);
     setMobileMode("detail");
-    setWorkspaceAndPersist(nextWorkspace, note.id);
+    setWorkspace(nextWorkspace);
+    setSelectedNoteId(note.id);
+    setDraftHtml(note.body);
+    setSaveState("Not saved");
   }
 
-  function handleDuplicateNote() {
-    if (!workspace || !selectedNote) {
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const duplicate = {
-      ...selectedNote,
-      id: createId(),
-      title: `${selectedNote.title} copy`,
-      images: selectedNote.images.map((image) => ({ ...image })),
-      createdAt: now,
-      updatedAt: now
-    };
-
-    setDraft(buildDraftFromNote(duplicate));
-    setMobileMode("detail");
-    setWorkspaceAndPersist({ ...workspace, notes: [duplicate, ...workspace.notes] }, duplicate.id);
-  }
-
-  function handleDeleteNote() {
-    if (!workspace || !selectedNote) {
-      return;
-    }
-
-    if (!window.confirm(`Delete "${selectedNote.title}"?`)) {
-      return;
+  function discardBlankDraftIfNeeded() {
+    if (!workspace || !selectedNote?.isDraft || isMeaningfulHtml(draftHtml)) {
+      return false;
     }
 
     const nextNotes = workspace.notes.filter((note) => note.id !== selectedNote.id);
-    setWorkspaceAndPersist({ ...workspace, notes: nextNotes }, nextNotes[0]?.id || null);
+    const nextSelectedId = nextNotes[0]?.id || null;
+    clearTimeout(saveTimerRef.current);
+    setWorkspace({ ...workspace, notes: nextNotes });
+    setSelectedNoteId(nextSelectedId);
+    setDraftHtml(nextNotes.find((note) => note.id === nextSelectedId)?.body || "");
+    setSaveState("Saved");
+    return true;
+  }
+
+  function flushCurrentNoteBeforeLeaving() {
+    if (!workspace || !selectedNote) {
+      return;
+    }
+
+    clearTimeout(saveTimerRef.current);
+    if (!isMeaningfulHtml(draftHtml)) {
+      discardBlankDraftIfNeeded();
+      return;
+    }
+
+    if (draftHtml === selectedNote.body && !selectedNote.isDraft) {
+      return;
+    }
+
+    const nextTitle = extractTitleFromHtml(draftHtml);
+    const nextWorkspace = {
+      ...workspace,
+      notes: workspace.notes.map((note) => (
+        note.id === selectedNote.id
+          ? {
+              ...note,
+              title: nextTitle,
+              body: draftHtml,
+              isDraft: false,
+              updatedAt: new Date().toISOString()
+            }
+          : note
+      ))
+    };
+
+    persistWorkspace(nextWorkspace, selectedNote.id);
+  }
+
+  function handleReturnToList() {
+    flushCurrentNoteBeforeLeaving();
+    setMobileMode("list");
+  }
+
+  function handleDeleteNote(noteId = selectedNoteId) {
+    if (!workspace) {
+      return;
+    }
+    const target = workspace.notes.find((note) => note.id === noteId);
+    if (!target) {
+      return;
+    }
+    if (!window.confirm(`Delete "${target.title}"?`)) {
+      return;
+    }
+
+    const nextNotes = workspace.notes.filter((note) => note.id !== noteId);
+    setSwipedNoteId(null);
+    persistWorkspace({ ...workspace, notes: nextNotes }, nextNotes[0]?.id || null);
+  }
+
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelectedNoteIds([]);
+    setListMenuOpen(false);
+    setSwipedNoteId(null);
+  }
+
+  function toggleSelectionMode() {
+    if (selectionMode) {
+      exitSelectionMode();
+      return;
+    }
+    setSelectionMode(true);
+    setSelectedNoteIds([]);
+    setListMenuOpen(false);
+    setSwipedNoteId(null);
+  }
+
+  function handleSelectAllVisible() {
+    if (!filteredNotes.length) {
+      return;
+    }
+    setSelectionMode(true);
+    setSelectedNoteIds(filteredNotes.map((note) => note.id));
+    setListMenuOpen(false);
+    setSwipedNoteId(null);
+  }
+
+  function handleListNotePress(noteId) {
+    if (selectionMode) {
+      setSelectedNoteIds((current) => (
+        current.includes(noteId)
+          ? current.filter((id) => id !== noteId)
+          : [...current, noteId]
+      ));
+      return;
+    }
+
+    flushCurrentNoteBeforeLeaving();
+    setSelectedNoteId(noteId);
+    setMobileMode("detail");
+  }
+
+  function handleDeleteSelected() {
+    if (!workspace || selectedNoteIds.length === 0) {
+      return;
+    }
+
+    const count = selectedNoteIds.length;
+    if (!window.confirm(`${count}件のメモを削除しますか？`)) {
+      return;
+    }
+
+    const nextNotes = workspace.notes.filter((note) => !selectedNoteIds.includes(note.id));
+    const nextSelectedId = selectedNoteIds.includes(selectedNoteId) ? nextNotes[0]?.id || null : selectedNoteId;
+    setSwipedNoteId(null);
+    setSelectionMode(false);
+    setSelectedNoteIds([]);
+    persistWorkspace({ ...workspace, notes: nextNotes }, nextSelectedId);
   }
 
   function handleTogglePin(noteId) {
     if (!workspace) {
       return;
     }
-
-    const target = workspace.notes.find((note) => note.id === noteId);
-    if (!target) {
-      return;
-    }
-
     const nextWorkspace = {
       ...workspace,
       notes: workspace.notes.map((note) => (
@@ -818,130 +827,29 @@ export default function App() {
           : note
       ))
     };
-
     setSwipedNoteId(null);
-    setWorkspaceAndPersist(nextWorkspace, selectedNoteId);
+    persistWorkspace(nextWorkspace, selectedNoteId);
   }
 
-  function handleDeleteFromList(noteId) {
+  function handleCreateFolder() {
     if (!workspace) {
       return;
     }
-
-    const target = workspace.notes.find((note) => note.id === noteId);
-    if (!target) {
+    const name = window.prompt("Folder name");
+    if (!name?.trim()) {
       return;
     }
-
-    if (!window.confirm(`Delete "${target.title}"?`)) {
-      return;
-    }
-
-    const nextNotes = workspace.notes.filter((note) => note.id !== noteId);
-    setSwipedNoteId(null);
-    setWorkspaceAndPersist({ ...workspace, notes: nextNotes }, nextNotes[0]?.id || null);
-  }
-
-  function applySlashCommand(command) {
-    if (!draft || !slashState) {
-      return;
-    }
-
-    const start = slashState.lineStart;
-    const currentCursor = draft.selectionStart ?? draft.editorText.length;
-    const nextBody = `${draft.editorText.slice(0, start)}${command.snippet}${draft.editorText.slice(currentCursor)}`;
-    setDraft({
-      ...draft,
-      editorText: nextBody,
-      selectionStart: start + command.snippet.length
-    });
-  }
-
-  function insertAtCursor(snippet) {
-    if (!draft) {
-      return;
-    }
-
-    const start = draft.selectionStart ?? draft.editorText.length;
-    const nextText = `${draft.editorText.slice(0, start)}${snippet}${draft.editorText.slice(start)}`;
-    setDraft({
-      ...draft,
-      editorText: nextText,
-      selectionStart: start + snippet.length
-    });
-    setInsertMenuOpen(false);
-  }
-
-  async function handleImageChange(event) {
-    const files = Array.from(event.target.files || []);
-    if (!files.length || !draft) {
-      return;
-    }
-
-    const images = await Promise.all(files.map(fileToDataUrl));
-    const selectionStart = draft.selectionStart ?? draft.editorText.length;
-    const markerText = images.map((image) => `\n![image:${image.id}]\n`).join("");
-    const nextEditorText = `${draft.editorText.slice(0, selectionStart)}${markerText}${draft.editorText.slice(selectionStart)}`;
-
-    setDraft({
-      ...draft,
-      editorText: nextEditorText,
-      images: [...draft.images, ...images],
-      selectionStart: selectionStart + markerText.length
-    });
-    event.target.value = "";
-  }
-
-  function jumpToNote(noteId) {
-    setSelectedNoteId(noteId);
-    setMobileMode("detail");
-  }
-
-  function handleExport() {
-    if (!workspace) {
-      return;
-    }
-
-    const blob = new Blob([JSON.stringify(workspace, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `memogpt-${new Date().toISOString().slice(0, 10)}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function handleImport(event) {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    file.text()
-      .then((text) => {
-        const nextWorkspace = normalizeWorkspace(JSON.parse(text));
-        setWorkspaceAndPersist(nextWorkspace, nextWorkspace.notes[0]?.id || null);
-      })
-      .catch(() => {
-        setError("JSON import failed.");
-      })
-      .finally(() => {
-        event.target.value = "";
-      });
+    const folder = { id: createId(), name: name.trim() };
+    persistWorkspace({ ...workspace, folders: [...workspace.folders, folder] }, selectedNoteId);
   }
 
   if (loading || !workspace) {
     return <div className="loading-screen">Loading MemoGPT...</div>;
   }
 
-  const folderCounts = workspace.folders.reduce((accumulator, folder) => {
-    accumulator[folder.id] = workspace.notes.filter((note) => note.folderId === folder.id).length;
-    return accumulator;
-  }, {});
-
   return (
     <div className={`app-shell apple-layout ${mobileMode === "detail" ? "is-detail-mode" : "is-list-mode"}`}>
-      <aside className={`sidebar ${mobileSidebarOpen ? "is-open" : ""}`}>
+      <aside className="sidebar">
         <div className="brand-card">
           <p className="brand-kicker">Memo workspace</p>
           <h1>MemoGPT</h1>
@@ -965,120 +873,98 @@ export default function App() {
               onClick={() => setActiveFolderId(folder.id)}
             >
               <span>{folder.name}</span>
-              <strong>{folderCounts[folder.id] || 0}</strong>
+              <strong>{workspace.notes.filter((note) => note.folderId === folder.id).length}</strong>
             </button>
           ))}
-        </div>
-
-        <div className="sidebar-section stats-grid">
-          <div className="stat-card">
-            <strong>{workspace.notes.filter((note) => note.pinned).length}</strong>
-            <span>Pinned</span>
-          </div>
-          <div className="stat-card">
-            <strong>{new Set(workspace.notes.flatMap((note) => note.tags)).size}</strong>
-            <span>Tags</span>
-          </div>
         </div>
       </aside>
 
       <main className="workspace">
         <section className="workspace-grid apple-grid">
-          <div className="panel note-panel apple-list-panel">
+          <div className="panel apple-list-panel">
             <header className="notes-header">
               <div className="notes-header-row">
-                <button className="back-link" type="button" onClick={() => setMobileSidebarOpen((current) => !current)}>
-                  ‹ フォルダ
-                </button>
-                <button className="circle-action" type="button" onClick={handleExport}>⋯</button>
+                <span className="back-link">‹ フォルダ</span>
+                <div className="header-menu">
+                  <button className="circle-action" type="button" onClick={() => setListMenuOpen((open) => !open)}>⋯</button>
+                  {listMenuOpen && (
+                    <div className="header-dropdown">
+                      <button type="button" onClick={toggleSelectionMode}>
+                        {selectionMode ? "選択を終了" : "複数選択"}
+                      </button>
+                      <button type="button" onClick={handleSelectAllVisible}>すべて選択</button>
+                    </div>
+                  )}
+                </div>
               </div>
               <h2 className="notes-title">すべての iCloud</h2>
               <div className="apple-search">
                 <span className="apple-search-icon">⌕</span>
-                <input
-                  type="search"
-                  placeholder="検索"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
+                <input type="search" placeholder="検索" value={search} onChange={(event) => setSearch(event.target.value)} />
               </div>
+              {selectionMode && (
+                <div className="selection-banner">
+                  <span>{selectedNoteIds.length}件を選択中</span>
+                  <button type="button" onClick={exitSelectionMode}>キャンセル</button>
+                </div>
+              )}
             </header>
 
             {error && <div className="error-banner">{error}</div>}
 
-            <div className="template-row apple-template-row">
-              <select value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
-                {noteTemplates.map((template) => (
-                  <option key={template.id} value={template.id}>{template.label}</option>
-                ))}
-              </select>
-            </div>
-
             <div className="notes-sections">
-              {pinnedNotes.length > 0 && (
-                <AppleSection
-                  title="ピンで固定"
-                  notes={pinnedNotes}
-                  workspace={workspace}
-                  selectedNote={selectedNote}
-                  swipedNoteId={swipedNoteId}
-                  setSwipedNoteId={setSwipedNoteId}
-                  onTogglePin={handleTogglePin}
-                  onDelete={handleDeleteFromList}
-                  onSelect={(noteId) => {
-                    setSelectedNoteId(noteId);
-                    setMobileMode("detail");
-                    setMobileSidebarOpen(false);
-                  }}
-                />
-              )}
               <AppleSection
-                title="今日"
-                notes={todayNotes}
-                workspace={workspace}
-                selectedNote={selectedNote}
+                title="ピンで固定"
+                notes={grouped.pinned}
+                folderNameById={folderNameById}
+                selectedNoteId={selectedNote?.id}
+                selectionMode={selectionMode}
+                selectedNoteIds={selectedNoteIds}
                 swipedNoteId={swipedNoteId}
                 setSwipedNoteId={setSwipedNoteId}
+                onSelect={handleListNotePress}
+                onDelete={handleDeleteNote}
                 onTogglePin={handleTogglePin}
-                onDelete={handleDeleteFromList}
-                onSelect={(noteId) => {
-                  setSelectedNoteId(noteId);
-                  setMobileMode("detail");
-                  setMobileSidebarOpen(false);
-                }}
+              />
+              <AppleSection
+                title="今日"
+                notes={grouped.today}
+                folderNameById={folderNameById}
+                selectedNoteId={selectedNote?.id}
+                selectionMode={selectionMode}
+                selectedNoteIds={selectedNoteIds}
+                swipedNoteId={swipedNoteId}
+                setSwipedNoteId={setSwipedNoteId}
+                onSelect={handleListNotePress}
+                onDelete={handleDeleteNote}
+                onTogglePin={handleTogglePin}
               />
               <AppleSection
                 title="過去7日間"
-                notes={weekNotes}
-                workspace={workspace}
-                selectedNote={selectedNote}
+                notes={grouped.week}
+                folderNameById={folderNameById}
+                selectedNoteId={selectedNote?.id}
+                selectionMode={selectionMode}
+                selectedNoteIds={selectedNoteIds}
                 swipedNoteId={swipedNoteId}
                 setSwipedNoteId={setSwipedNoteId}
+                onSelect={handleListNotePress}
+                onDelete={handleDeleteNote}
                 onTogglePin={handleTogglePin}
-                onDelete={handleDeleteFromList}
-                onSelect={(noteId) => {
-                  setSelectedNoteId(noteId);
-                  setMobileMode("detail");
-                  setMobileSidebarOpen(false);
-                }}
               />
-              {olderNotes.length > 0 && (
-                <AppleSection
-                  title="それ以前"
-                  notes={olderNotes}
-                  workspace={workspace}
-                  selectedNote={selectedNote}
-                  swipedNoteId={swipedNoteId}
-                  setSwipedNoteId={setSwipedNoteId}
-                  onTogglePin={handleTogglePin}
-                  onDelete={handleDeleteFromList}
-                  onSelect={(noteId) => {
-                    setSelectedNoteId(noteId);
-                    setMobileMode("detail");
-                    setMobileSidebarOpen(false);
-                  }}
-                />
-              )}
+              <AppleSection
+                title="それ以前"
+                notes={grouped.older}
+                folderNameById={folderNameById}
+                selectedNoteId={selectedNote?.id}
+                selectionMode={selectionMode}
+                selectedNoteIds={selectedNoteIds}
+                swipedNoteId={swipedNoteId}
+                setSwipedNoteId={setSwipedNoteId}
+                onSelect={handleListNotePress}
+                onDelete={handleDeleteNote}
+                onTogglePin={handleTogglePin}
+              />
             </div>
 
             <footer className="notes-footer">
@@ -1086,115 +972,89 @@ export default function App() {
             </footer>
           </div>
 
-          <div className="panel editor-panel apple-editor-panel">
-            {draft ? (
+          <div className="panel apple-editor-panel">
+            {selectedNote && (
               <>
                 <header className="detail-topbar">
-                  <button className="back-link" type="button" onClick={() => setMobileMode("list")}>
-                    ‹ すべての iCloud
-                  </button>
+                  <button className="back-link" type="button" onClick={handleReturnToList}>‹ すべての iCloud</button>
                   <div className="detail-actions">
-                    <button className="icon-action" type="button" onClick={handleExport}>⤴</button>
-                    <button className="icon-action" type="button" onClick={handleDuplicateNote}>⋯</button>
+                    <button className="icon-action" type="button">⤴</button>
+                    <button className="icon-action" type="button" onClick={() => handleDeleteNote(selectedNote.id)}>⋯</button>
                   </div>
                 </header>
 
-                  <div className="editor-form apple-editor-form">
-                  <div className="editor-area-wrap">
-                    <textarea
-                      className="editor-area apple-editor-area"
-                      value={draft.editorText}
-                      onChange={(event) => updateDraft("editorText", event.target.value)}
-                      onClick={(event) => updateDraft("selectionStart", event.target.selectionStart)}
-                      onKeyUp={(event) => updateDraft("selectionStart", event.currentTarget.selectionStart)}
-                      onSelect={(event) => updateDraft("selectionStart", event.currentTarget.selectionStart)}
-                      placeholder="Write freely here..."
-                    />
+                <div
+                  ref={editorRef}
+                  className="live-editor"
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={syncDraftFromEditor}
+                  onKeyUp={saveSelection}
+                  onMouseUp={saveSelection}
+                  onTouchEnd={saveSelection}
+                />
 
-                    {slashState && visibleCommands.length > 0 && (
-                      <div className="slash-menu">
-                        {visibleCommands.map((command) => (
-                          <button key={command.id} className="slash-item" type="button" onClick={() => applySlashCommand(command)}>
-                            <strong>{command.label}</strong>
-                            <span>{command.snippet.trim()}</span>
-                          </button>
-                        ))}
+                <div className="detail-bottom-bar">
+                  <button className="bottom-icon" type="button" onClick={handleReturnToList}>☰</button>
+                  <button className="bottom-icon" type="button" onClick={() => setSheet(sheet === "insert" ? null : "insert")}>＋</button>
+                  <button className="bottom-icon" type="button" onClick={() => setSheet(sheet === "format" ? null : "format")}>Aa</button>
+                  <button className="bottom-icon" type="button" onClick={() => setSheet(sheet === "image" ? null : "image")}>🖼</button>
+                  <button className="bottom-icon" type="button" onClick={handleUndo}>↶</button>
+                  <button className="bottom-icon" type="button" onClick={handleRedo}>↷</button>
+                  <button className="bottom-icon" type="button" onClick={handleCreateNote}>✎</button>
+                </div>
+
+                {sheet && (
+                  <div className="editor-sheet">
+                    {sheet === "insert" && (
+                      <div className="sheet-grid">
+                        <button type="button" onClick={() => changeBlockTag("h1")}>見出し 1</button>
+                        <button type="button" onClick={() => changeBlockTag("h2")}>見出し 2</button>
+                        <button type="button" onClick={() => changeBlockTag("h3")}>見出し 3</button>
+                        <button type="button" onClick={toggleTocOnBlock}>見出しを目次に表示</button>
+                      </div>
+                    )}
+
+                    {sheet === "format" && (
+                      <div className="sheet-grid">
+                        <button type="button" onClick={() => applyBlockStyle("size", "small")}>小さく</button>
+                        <button type="button" onClick={() => applyBlockStyle("size", "large")}>大きく</button>
+                        <button type="button" onClick={() => applyBlockStyle("font", "serif")}>明朝</button>
+                        <button type="button" onClick={() => applyBlockStyle("font", "mono")}>等幅</button>
+                        <button type="button" onClick={() => applyBold("medium")}>中太</button>
+                        <button type="button" onClick={() => applyBold("bold")}>太字</button>
+                      </div>
+                    )}
+
+                    {sheet === "image" && (
+                      <div className="sheet-grid">
+                        <button type="button" onClick={() => imageInputRef.current?.click()}>写真から選ぶ</button>
+                        <button type="button" onClick={() => fileInputRef.current?.click()}>ファイルから選ぶ</button>
+                        <button type="button" onClick={() => cameraInputRef.current?.click()}>カメラで撮る</button>
                       </div>
                     )}
                   </div>
+                )}
 
-                  <div className="save-line">
-                    <span>{saveState}</span>
-                    <span>{draft.images.length} 枚の画像</span>
-                    <span>Updated {formatWhen(selectedNote?.updatedAt || new Date().toISOString())}</span>
-                  </div>
+                <input ref={imageInputRef} className="hidden-input" type="file" accept="image/*" multiple onChange={handleImageFiles} />
+                <input ref={fileInputRef} className="hidden-input" type="file" accept="image/*" multiple onChange={handleImageFiles} />
+                <input ref={cameraInputRef} className="hidden-input" type="file" accept="image/*" capture="environment" onChange={handleImageFiles} />
 
-                  <div className="mobile-inline-preview">
-                    {buildPreview({
-                      ...draft,
-                      title: splitEditorText(draft.editorText).title,
-                      body: splitEditorText(draft.editorText).body,
-                      tags: parseTags(draft.tagInput)
-                    }, notesByTitle, jumpToNote)}
-                  </div>
-
-                  <div className="detail-bottom-bar">
-                    <button className="bottom-icon" type="button" onClick={() => setMobileMode("list")}>☰</button>
-                    <div className="insert-button-wrap">
-                      <button className="bottom-icon" type="button" onClick={() => setInsertMenuOpen((current) => !current)}>≡</button>
-                      {insertMenuOpen && (
-                        <div className="insert-popover">
-                          <button type="button" onClick={() => insertAtCursor("\n## 目次\n")}>目次追加</button>
-                          <button type="button" onClick={() => insertAtCursor("\n---\n")}>区切り線</button>
-                        </div>
-                      )}
-                    </div>
-                    <label className="bottom-icon image-upload bottom-upload">
-                      <span>📎</span>
-                      <input type="file" accept="image/*" multiple onChange={handleImageChange} />
-                    </label>
-                    <button className="bottom-icon" type="button" onClick={handleCreateNote}>✎</button>
-                  </div>
+                <div className="save-line">
+                  <span>{saveState}</span>
+                  <span>{formatWhen(selectedNote.updatedAt)}</span>
                 </div>
               </>
-            ) : (
-              <div className="empty-state">Create your first note to start the new workspace.</div>
-            )}
-          </div>
-
-          <div className="panel preview-panel apple-preview-panel">
-            <div className="panel-head">
-              <div>
-                <p className="eyebrow">Preview</p>
-                <h3>Readable note view</h3>
-              </div>
-            </div>
-
-            {draft ? (
-              <>
-                <div className="preview-header">
-                  <h2>{splitEditorText(draft.editorText).title || "Untitled"}</h2>
-                  <div className="tag-row">
-                    {parseTags(draft.tagInput).map((tag) => <span key={tag} className="tag-chip">#{tag}</span>)}
-                    {draft.pinned && <span className="pill">Pinned</span>}
-                  </div>
-                </div>
-                {buildPreview({
-                  ...draft,
-                  title: splitEditorText(draft.editorText).title,
-                  body: splitEditorText(draft.editorText).body,
-                  tags: parseTags(draft.tagInput)
-                }, notesByTitle, jumpToNote)}
-              </>
-            ) : (
-              <div className="empty-state">Preview appears here.</div>
             )}
           </div>
         </section>
 
-        <button className="floating-compose-button" type="button" onClick={handleCreateNote}>
-          ✎
-        </button>
+        <div className="floating-action-stack">
+          {selectionMode && selectedNoteIds.length > 0 && (
+            <button className="floating-delete-button" type="button" onClick={handleDeleteSelected}>削除</button>
+          )}
+          <button className="floating-compose-button" type="button" onClick={handleCreateNote}>✎</button>
+        </div>
       </main>
     </div>
   );
