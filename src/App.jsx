@@ -180,6 +180,17 @@ function extractSnippetFromHtml(html) {
   return blocks.slice(1).join(" ").slice(0, 96) || "メモ";
 }
 
+function collectTocItems(html) {
+  const temporary = document.createElement("div");
+  temporary.innerHTML = html;
+  return Array.from(temporary.querySelectorAll("[data-toc='true']"))
+    .map((node, index) => ({
+      index,
+      label: node.textContent?.trim() || `見出し ${index + 1}`,
+      level: Number(node.tagName?.slice(1)) || 2
+    }));
+}
+
 function formatWhen(value) {
   return new Intl.DateTimeFormat("ja-JP", {
     month: "short",
@@ -580,6 +591,12 @@ export default function App() {
     setSheet((current) => (current === nextSheet ? null : nextSheet));
   }
 
+  function closeSheet() {
+    editorRef.current?.focus();
+    restoreSelection();
+    setSheet(null);
+  }
+
   function handleEditorFocus() {
     setEditorFocused(true);
     setKeyboardInset((current) => current);
@@ -611,8 +628,14 @@ export default function App() {
     if (!node) {
       return null;
     }
-    const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-    return element?.closest("h1, h2, h3, p, figure, div");
+    let element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    while (element && element !== editorRef.current) {
+      if (element.parentElement === editorRef.current && /^(H1|H2|H3|P|FIGURE|DIV)$/i.test(element.tagName)) {
+        return element;
+      }
+      element = element.parentElement;
+    }
+    return null;
   }
 
   function changeBlockTag(tagName) {
@@ -629,7 +652,7 @@ export default function App() {
     }
     block.replaceWith(replacement);
     setDraftHtml(editorRef.current.innerHTML);
-    setSheet(null);
+    closeSheet();
   }
 
   function toggleTocOnBlock() {
@@ -639,7 +662,7 @@ export default function App() {
     }
     block.dataset.toc = block.dataset.toc === "true" ? "false" : "true";
     setDraftHtml(editorRef.current.innerHTML);
-    setSheet(null);
+    closeSheet();
   }
 
   function applyBlockStyle(attribute, value) {
@@ -654,6 +677,7 @@ export default function App() {
       block.dataset[attribute] = value;
     }
     setDraftHtml(editorRef.current.innerHTML);
+    closeSheet();
   }
 
   function applyBold(weight) {
@@ -663,6 +687,7 @@ export default function App() {
     }
     block.dataset.weight = weight;
     setDraftHtml(editorRef.current.innerHTML);
+    closeSheet();
   }
 
   function handleUndo() {
@@ -710,7 +735,24 @@ export default function App() {
     selection.addRange(nextRange);
     saveSelection();
     syncDraftFromEditor();
-    setSheet(null);
+    closeSheet();
+  }
+
+  function jumpToTocItem(index) {
+    const block = editorRef.current?.querySelectorAll("[data-toc='true']")?.[index];
+    if (!block) {
+      return;
+    }
+
+    block.scrollIntoView({ block: "center", behavior: "smooth" });
+    const range = document.createRange();
+    range.selectNodeContents(block);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    saveSelection();
+    closeSheet();
   }
 
   async function handleImageFiles(event) {
@@ -917,6 +959,7 @@ export default function App() {
   const shouldShowKeyboardTools = editorFocused;
   const keyboardBarStyle = shouldShowKeyboardTools ? { "--keyboard-inset": `${keyboardInset}px` } : undefined;
   const keyboardSheetStyle = shouldShowKeyboardTools ? { "--keyboard-sheet-offset": `${keyboardInset + 58}px` } : undefined;
+  const tocItems = collectTocItems(draftHtml);
 
   return (
     <div className={`app-shell apple-layout ${mobileMode === "detail" ? "is-detail-mode" : "is-list-mode"}`}>
@@ -1096,12 +1139,34 @@ export default function App() {
                         <button type="button" onMouseDown={keepEditorSelection} onClick={() => cameraInputRef.current?.click()}>カメラで撮る</button>
                       </div>
                     )}
+
+                    {sheet === "toc" && (
+                      <div className="sheet-grid toc-grid">
+                        {tocItems.length ? tocItems.map((item) => (
+                          <button
+                            key={`${item.index}-${item.label}`}
+                            type="button"
+                            className={`toc-item level-${item.level}`}
+                            onMouseDown={keepEditorSelection}
+                            onClick={() => jumpToTocItem(item.index)}
+                          >
+                            {item.label}
+                          </button>
+                        )) : (
+                          <div className="sheet-empty">目次に入った見出しがまだありません</div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="sheet-close-row">
+                      <button type="button" className="sheet-close-button" onMouseDown={keepEditorSelection} onClick={closeSheet}>Close</button>
+                    </div>
                   </div>
                 )}
 
                 {shouldShowKeyboardTools && (
                   <div className="detail-bottom-bar" style={keyboardBarStyle}>
-                    <button className="bottom-icon" type="button" onMouseDown={keepEditorSelection} onClick={handleReturnToList}>☰</button>
+                    <button className={`bottom-icon ${sheet === "toc" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("toc")}>☰</button>
                     <button className={`bottom-icon ${sheet === "insert" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("insert")}>＋</button>
                     <button className={`bottom-icon ${sheet === "format" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("format")}>Aa</button>
                     <button className={`bottom-icon ${sheet === "image" ? "is-active" : ""}`} type="button" onMouseDown={keepEditorSelection} onClick={() => toggleSheet("image")}>🖼</button>
